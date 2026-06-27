@@ -35,7 +35,7 @@ export default function HeaderDashboard({ user }: HeaderDashboardProps) {
           <Logo className="h-9" />
           <div className="flex flex-col justify-center">
             <div className="flex items-baseline space-x-2">
-              <span className="font-bold text-sm tracking-widest text-slate-100">製造指示書管理システム</span>
+              <span className="font-bold text-sm tracking-widest text-slate-100">備品在庫管理システム</span>
               <span className="text-[10px] text-slate-400 font-normal">v3.2.1</span>
             </div>
           </div>
