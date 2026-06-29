@@ -37,10 +37,10 @@ export default function LoginPage() {
         return;
       }
 
-      router.push('/orders');
+      router.push('/portal');
       router.refresh();
 
-    } catch (err) {
+    } catch  {
       setErrorMsg('予期せぬエラーが発生しました。');
     } finally {
       setLoading(false);
@@ -63,7 +63,7 @@ export default function LoginPage() {
           
           {/* システムタイトル (アイコンを無くしてよりスマートに) */}
           <div className="text-center mb-8">
-            <h1 className="text-xl font-bold text-slate-800 tracking-wider">製造指示書管理システム</h1>
+            <h1 className="text-xl font-bold text-slate-800 tracking-wider">社内システム</h1>
             <p className="text-xs text-brand-blue font-mono tracking-widest mt-1.5 uppercase">Manufacturing Instruction Management</p>
           </div>
 

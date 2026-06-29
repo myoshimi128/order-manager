@@ -11,7 +11,7 @@ export default function Header() {
         <Logo className="h-8" />
         
         <div className="flex flex-col text-left leading-none">
-          <span className="font-bold text-xs tracking-wider">MFG-SYS</span>
+          <span className="font-bold text-xs tracking-wider">社内システム</span>
           <span className="text-[9px] text-slate-400 mt-0.5">V3.2.1</span>
         </div>
       </div>
