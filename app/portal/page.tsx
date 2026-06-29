@@ -1,18 +1,12 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
+import { Layout } from "@/components/Layout"; // 共通レイアウト
+import { Button } from "@/components/Button"; // 共通ボタン
 
 export default function SystemPortal() {
   return (
-    // globals.cssの変数(var(--color-background))を背景に適用
-    <div className="min-h-screen bg-(--color-background) text-(--color-foreground) flex flex-col justify-between font-sans">
-      
-      {/* 共通ヘッダーコンポーネント */}
-      <Header />
-
+    <Layout>
       {/* メイン選択エリア */}
       <div className="w-full max-w-4xl mx-auto my-auto py-12 px-6 space-y-8 text-center">
         <div>
@@ -41,13 +35,8 @@ export default function SystemPortal() {
               </p>
             </div>
             
-            {/* 初期：グレー＋青文字 / ホバー：濃いネイビー＋白文字 */}
-            <Link 
-              href="/orders" 
-              className="mt-6 w-full py-2.5 bg-slate-100 hover:bg-(--color-brand-dark) text-(--color-brand-blue) hover:text-white font-semibold text-sm rounded-lg text-center block transition-all cursor-pointer"
-            >
-              システムを開く
-            </Link>
+            {/* 共通ボタン（製造指示書リンク） */}
+            <Button href="/orders">システムを開く</Button>
           </div>
 
           {/* 2. 備品在庫管理システム */}
@@ -64,21 +53,12 @@ export default function SystemPortal() {
               </p>
             </div>
             
-            {/* 初期：グレー＋青文字 / ホバー：濃いネイビー＋白文字 */}
-            <Link 
-              href="/supply" 
-              className="mt-6 w-full py-2.5 bg-slate-100 hover:bg-(--color-brand-dark) text-(--color-brand-blue) hover:text-white font-semibold text-sm rounded-lg text-center block transition-all cursor-pointer"
-            >
-              システムを開く
-            </Link>
+            {/* 共通ボタン（備品在庫リンク） */}
+            <Button href="/supply">システムを開く</Button>
           </div>
 
         </div>
       </div>
-
-      {/* 共通フッターコンポーネント */}
-      <Footer />
-
-    </div>
+    </Layout>
   );
 }
