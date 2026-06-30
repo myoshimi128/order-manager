@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Layout } from "@/components/Layout"; // ✨ 復活！
+import { Layout } from "@/components/Layout"; 
 import { Button } from "@/components/Button";
 
 const initialItems = [
@@ -20,9 +20,58 @@ export default function SupplyDashboard() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<typeof initialItems[0] | null>(null);
 
+  // --- 【追加】出入庫モーダル用のステート管理 ---
+  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const [stockItem, setStockItem] = useState<typeof initialItems[0] | null>(null);
+  const [stockMode, setStockMode] = useState<"消費" | "直接入庫">("消費"); // 9割が出庫なのでデフォルト「消費」
+  const [stockQuantity, setStockQuantity] = useState(1); // 初期数は 1
+
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<"all" | "alert">("all");
   const [sortKey, setSortKey] = useState<"none" | "stock-asc" | "stock-desc" | "name" | "location">("none");
+
+  // --- 【追加】出入庫モーダルを開く処理 ---
+  const openStockModal = (item: typeof initialItems[0]) => {
+    setStockItem({ ...item });
+    setStockMode("消費"); // 開く時は常に消費モードにする
+    setStockQuantity(1);  // 数量も1にリセット
+    setIsStockModalOpen(true);
+  };
+
+  // --- 【追加】出入庫の確定ロジック ---
+  const handleSaveStock = () => {
+    if (!stockItem) return;
+
+    // 変動量を計算（消費ならマイナス、入庫ならプラス）
+    const change = stockMode === "消費" ? -stockQuantity : stockQuantity;
+    const nextStock = Math.max(0, stockItem.current_stock + change);
+
+    // 新しい在庫数に基づいてステータスを自動判定するロジック
+    let nextStatus = "正常";
+    if (nextStock === 0) {
+      nextStatus = "在庫切れ";
+    } else if (nextStock <= stockItem.threshold_stock) {
+      // もともと「発注済み」状態なら、消費しても「発注済み」のまま維持する方が自然
+      nextStatus = stockItem.status === "発注済み" ? "発注済み" : "要補充";
+    }
+
+    // 1. 画面上のステートを即時更新
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === stockItem.id
+          ? { ...item, current_stock: nextStock, status: nextStatus }
+          : item
+      )
+    );
+
+    // 2. 【TODO】ここに後からSupabaseへの保存処理を書き込む
+    // - itemsテーブルの current_stock を UPDATE
+    // - stock_logsテーブルに log_type, quantity_changed(stockQuantity), logged_by_user_id 等を INSERT
+    console.log(`Supabase保存用: ID=${stockItem.id}, モード=${stockMode}, 変動数=${stockQuantity}`);
+
+    setIsStockModalOpen(false);
+    setStockItem(null);
+  };
 
   const openEditModal = (item: typeof initialItems[0]) => {
     setEditItem({ ...item });
@@ -60,7 +109,6 @@ export default function SupplyDashboard() {
   const alertCount = useMemo(() => items.filter((item) => item.status === "要補充" || item.status === "在庫切れ").length, [items]);
 
   return (
-    // classNameに max-w-7xl を指定して、この画面だけ横幅を広げる！
     <Layout className="max-w-7xl space-y-6 my-6">
       
       {/* ヘッダーエリア */}
@@ -172,7 +220,14 @@ export default function SupplyDashboard() {
                           item.status === "要補充" ? "bg-orange-50 text-orange-600 border-orange-100" : "bg-red-100 text-red-700 border-red-200"
                         }`}>{item.status}</span>
                       </td>
+                      {/* アクションカラムのボタン配置を調整 */}
                       <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
+                        <button 
+                          onClick={() => openStockModal(item)}
+                          className="bg-brand-dark hover:bg-brand-blue text-white text-xs font-bold py-1 px-2.5 rounded-md transition-colors cursor-pointer"
+                        >
+                          消費 / 入庫
+                        </button>
                         <div className="inline-block w-14">
                           <Button href={`/supply/requests?itemId=${item.id}`} className="bg-white hover:bg-slate-50 text-slate-600 hover:text-brand-blue border border-slate-300 text-xs font-bold py-1 px-2 rounded-md">申請</Button>
                         </div>
@@ -251,6 +306,92 @@ export default function SupplyDashboard() {
               <button onClick={() => { setIsEditOpen(false); setEditItem(null); }} className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-600 font-semibold text-xs rounded-lg transition-colors cursor-pointer">キャンセル</button>
               <button onClick={handleSaveEdit} className="px-4 py-2 bg-brand-dark text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer">保存する</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- 【追加】出入庫クイックモーダル (ポップアップ) --- */}
+      {isStockModalOpen && stockItem && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* ヘッダー */}
+            <div className="p-5 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-800">{stockItem.name}</h3>
+              <p className="text-xs text-slate-400 mt-0.5">現在の在庫: <span className="font-bold text-slate-700">{stockItem.current_stock}</span> {stockItem.unit}</p>
+            </div>
+
+            {/* メインエリア */}
+            <div className="p-5 space-y-5">
+              {/* モード選択タブ（現場ファーストな出庫デフォルト設計） */}
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">処理を選択</label>
+                <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
+                  <button
+                    type="button"
+                    onClick={() => setStockMode("消費")}
+                    className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      stockMode === "消費" ? "bg-red-500 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    🔴 消費 (出庫)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStockMode("直接入庫")}
+                    className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      stockMode === "直接入庫" ? "bg-emerald-500 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    🟢 直接入庫
+                  </button>
+                </div>
+              </div>
+
+              {/* 数量カウンター */}
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">数量 ({stockItem.unit})</label>
+                <div className="flex items-center justify-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    disabled={stockQuantity <= 1}
+                    onClick={() => setStockQuantity(q => q - 1)}
+                    className="w-10 h-10 bg-white border border-slate-300 rounded-full flex items-center justify-center font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white transition-all cursor-pointer shadow-xs"
+                  >
+                    －
+                  </button>
+                  <span className="text-lg font-bold w-12 text-center text-slate-800 font-mono">{stockQuantity}</span>
+                  <button
+                    type="button"
+                    onClick={() => setStockQuantity(q => q + 1)}
+                    className="w-10 h-10 bg-white border border-slate-300 rounded-full flex items-center justify-center font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-xs"
+                  >
+                    ＋
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* アクションボタン */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => { setIsStockModalOpen(false); setStockItem(null); }}
+                className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-600 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveStock}
+                className={`px-5 py-2 text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer ${
+                  stockMode === "消費" ? "bg-red-500 hover:bg-red-600" : "bg-emerald-500 hover:bg-emerald-600"
+                }`}
+              >
+                {stockMode === "消費" ? "消費を確定する" : "入庫を確定する"}
+              </button>
+            </div>
+
           </div>
         </div>
       )}
