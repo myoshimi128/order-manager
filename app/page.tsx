@@ -14,7 +14,7 @@ export default function HomePage() {
       } = await supabase.auth.getUser();
 
       if (user) {
-        router.replace("/orders");
+        router.replace("/portal");
       } else {
         router.replace("/login");
       }
