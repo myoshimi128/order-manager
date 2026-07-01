@@ -20,42 +20,38 @@ export default function SupplyDashboard() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<typeof initialItems[0] | null>(null);
 
-  // --- 【追加】出入庫モーダル用のステート管理 ---
+  // --- 出入庫モーダル用のステート管理 ---
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
   const [stockItem, setStockItem] = useState<typeof initialItems[0] | null>(null);
-  const [stockMode, setStockMode] = useState<"消費" | "直接入庫">("消費"); // 9割が出庫なのでデフォルト「消費」
-  const [stockQuantity, setStockQuantity] = useState(1); // 初期数は 1
+  const [stockMode, setStockMode] = useState<"消費" | "直接入庫">("消費");
+  const [stockQuantity, setStockQuantity] = useState(1);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<"all" | "alert">("all");
   const [sortKey, setSortKey] = useState<"none" | "stock-asc" | "stock-desc" | "name" | "location">("none");
 
-  // --- 【追加】出入庫モーダルを開く処理 ---
+  // --- 出入庫モーダルを開く処理 ---
   const openStockModal = (item: typeof initialItems[0]) => {
     setStockItem({ ...item });
-    setStockMode("消費"); // 開く時は常に消費モードにする
-    setStockQuantity(1);  // 数量も1にリセット
+    setStockMode("消費");
+    setStockQuantity(1);
     setIsStockModalOpen(true);
   };
 
-  // --- 【追加】出入庫の確定ロジック ---
+  // --- 出入庫の確定ロジック ---
   const handleSaveStock = () => {
     if (!stockItem) return;
 
-    // 変動量を計算（消費ならマイナス、入庫ならプラス）
     const change = stockMode === "消費" ? -stockQuantity : stockQuantity;
     const nextStock = Math.max(0, stockItem.current_stock + change);
 
-    // 新しい在庫数に基づいてステータスを自動判定するロジック
     let nextStatus = "正常";
     if (nextStock === 0) {
       nextStatus = "在庫切れ";
     } else if (nextStock <= stockItem.threshold_stock) {
-      // もともと「発注済み」状態なら、消費しても「発注済み」のまま維持する方が自然
       nextStatus = stockItem.status === "発注済み" ? "発注済み" : "要補充";
     }
 
-    // 1. 画面上のステートを即時更新
     setItems((prev) =>
       prev.map((item) =>
         item.id === stockItem.id
@@ -64,9 +60,6 @@ export default function SupplyDashboard() {
       )
     );
 
-    // 2. 【TODO】ここに後からSupabaseへの保存処理を書き込む
-    // - itemsテーブルの current_stock を UPDATE
-    // - stock_logsテーブルに log_type, quantity_changed(stockQuantity), logged_by_user_id 等を INSERT
     console.log(`Supabase保存用: ID=${stockItem.id}, モード=${stockMode}, 変動数=${stockQuantity}`);
 
     setIsStockModalOpen(false);
@@ -85,6 +78,7 @@ export default function SupplyDashboard() {
     setEditItem(null);
   };
 
+  // --- 【連動化】検索・フィルター・ソートを適用する処理 ---
   const processedItems = useMemo(() => {
     let result = [...items];
     if (searchQuery.trim() !== "") {
@@ -106,7 +100,10 @@ export default function SupplyDashboard() {
     return result;
   }, [items, searchQuery, filterMode, sortKey]);
 
-  const alertCount = useMemo(() => items.filter((item) => item.status === "要補充" || item.status === "在庫切れ").length, [items]);
+  // --- 【連動化】現在見えている中でのアラート数を数える ---
+  const displayAlertCount = useMemo(() => {
+    return processedItems.filter((item) => item.status === "要補充" || item.status === "在庫切れ").length;
+  }, [processedItems]);
 
   return (
     <Layout className="max-w-7xl space-y-6 my-6">
@@ -134,8 +131,8 @@ export default function SupplyDashboard() {
       {/* 上部サマリーカード */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { title: "総備品数", count: String(items.length), sub: "件登録済み", color: "text-slate-800" },
-          { title: "在庫アラート", count: String(alertCount), sub: "件 補充必要", color: "text-red-500" },
+          { title: "該当備品数", count: String(processedItems.length), sub: "件表示中", color: "text-slate-800" },
+          { title: "在庫アラート", count: String(displayAlertCount), sub: "件 補充必要", color: "text-red-500" },
           { title: "発注リクエスト中", count: "2", sub: "件 承認待ち", color: "text-slate-800" },
           { title: "今月の納品", count: "3", sub: "件 検収完了", color: "text-slate-800" }
         ].map((card, i) => (
@@ -165,7 +162,7 @@ export default function SupplyDashboard() {
                 すべて ({items.length})
               </button>
               <button onClick={() => setFilterMode("alert")} className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1 ${filterMode === "alert" ? "bg-red-500 text-white shadow-xs" : "text-red-500 hover:bg-slate-50"}`}>
-                アラートのみ ({alertCount})
+                アラートのみ ({items.filter((item) => item.status === "要補充" || item.status === "在庫切れ").length})
               </button>
             </div>
           </div>
@@ -220,9 +217,9 @@ export default function SupplyDashboard() {
                           item.status === "要補充" ? "bg-orange-50 text-orange-600 border-orange-100" : "bg-red-100 text-red-700 border-red-200"
                         }`}>{item.status}</span>
                       </td>
-                      {/* アクションカラムのボタン配置を調整 */}
                       <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
                         <button 
+                          type="button"
                           onClick={() => openStockModal(item)}
                           className="bg-brand-dark hover:bg-brand-blue text-white text-xs font-bold py-1 px-2.5 rounded-md transition-colors cursor-pointer"
                         >
@@ -231,7 +228,7 @@ export default function SupplyDashboard() {
                         <div className="inline-block w-14">
                           <Button href={`/supply/requests?itemId=${item.id}`} className="bg-white hover:bg-slate-50 text-slate-600 hover:text-brand-blue border border-slate-300 text-xs font-bold py-1 px-2 rounded-md">申請</Button>
                         </div>
-                        <button onClick={() => openEditModal(item)} className="p-1 text-slate-400 hover:text-slate-600 transition-colors inline-flex items-center cursor-pointer text-xs">✏️</button>
+                        <button type="button" onClick={() => openEditModal(item)} className="p-1 text-slate-400 hover:text-slate-600 transition-colors inline-flex items-center cursor-pointer text-xs">✏️</button>
                       </td>
                     </tr>
                   );
@@ -310,20 +307,15 @@ export default function SupplyDashboard() {
         </div>
       )}
 
-      {/* --- 【追加】出入庫クイックモーダル (ポップアップ) --- */}
+      {/* 出入庫クイックモーダル */}
       {isStockModalOpen && stockItem && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            
-            {/* ヘッダー */}
             <div className="p-5 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-800">{stockItem.name}</h3>
               <p className="text-xs text-slate-400 mt-0.5">現在の在庫: <span className="font-bold text-slate-700">{stockItem.current_stock}</span> {stockItem.unit}</p>
             </div>
-
-            {/* メインエリア */}
             <div className="p-5 space-y-5">
-              {/* モード選択タブ（現場ファーストな出庫デフォルト設計） */}
               <div>
                 <label className="text-xs font-bold text-slate-500 block mb-1.5">処理を選択</label>
                 <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
@@ -340,15 +332,13 @@ export default function SupplyDashboard() {
                     type="button"
                     onClick={() => setStockMode("直接入庫")}
                     className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      stockMode === "直接入庫" ? "bg-emerald-500 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
+                      stockMode === "直接入庫" ? "bg-emerald-50 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
                     🟢 直接入庫
                   </button>
                 </div>
               </div>
-
-              {/* 数量カウンター */}
               <div>
                 <label className="text-xs font-bold text-slate-500 block mb-1.5">数量 ({stockItem.unit})</label>
                 <div className="flex items-center justify-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
@@ -371,8 +361,6 @@ export default function SupplyDashboard() {
                 </div>
               </div>
             </div>
-
-            {/* アクションボタン */}
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-2 justify-end">
               <button
                 type="button"
@@ -391,7 +379,6 @@ export default function SupplyDashboard() {
                 {stockMode === "消費" ? "消費を確定する" : "入庫を確定する"}
               </button>
             </div>
-
           </div>
         </div>
       )}
