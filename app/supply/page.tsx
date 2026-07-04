@@ -1,28 +1,33 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Layout } from "@/components/Layout"; 
 import { Button } from "@/components/Button";
+import { getItems } from "@/services/item";
 
-const initialItems = [
-  { id: "1", name: "コピー用紙 A4", catalog_no: "PPC-A4-500", location: "事務所 棚A-1", current_stock: 3, threshold_stock: 5, unit: "本", status: "要補充" },
-  { id: "2", name: "ボールペン（黒）", catalog_no: "BP-BLK-10", location: "事務所 棚A-2", current_stock: 12, threshold_stock: 5, unit: "本", status: "正常" },
-  { id: "3", name: "養生テープ", catalog_no: "YT-50", location: "現場 倉庫B", current_stock: 1, threshold_stock: 3, unit: "個", status: "発注済み" },
-  { id: "4", name: "軍手（M）", catalog_no: "GG-M-12P", location: "現場 倉庫B", current_stock: 6, threshold_stock: 10, unit: "双", status: "要補充" },
-  { id: "5", name: "インクカートリッジ BCI-381", catalog_no: "BCI-381PGBK", location: "事務所 棚A-3", current_stock: 2, threshold_stock: 2, unit: "個", status: "発注済み" },
-  { id: "6", name: "安全靴（27cm）", catalog_no: "SS-270-JIS", location: "現場 倉庫A", current_stock: 4, threshold_stock: 2, unit: "足", status: "正常" },
-  { id: "7", name: "清掃用モップ", catalog_no: "MOP-60", location: "現場 倉庫C", current_stock: 0, threshold_stock: 1, unit: "本", status: "在庫切れ" },
-];
+type Item = {
+  id: string;
+  name: string;
+  catalog_no: string | null;
+  purchase_url: string | null;
+  location: string;
+  current_stock: number;
+  threshold_stock: number;
+  unit: string;
+  created_at: string;
+
+   // 一時的に画面表示用
+  status?: string;
+};
 
 export default function SupplyDashboard() {
-  const [items, setItems] = useState(initialItems);
-  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [items, setItems] = useState<Item[]>([]);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editItem, setEditItem] = useState<typeof initialItems[0] | null>(null);
+  const [editItem, setEditItem] = useState<Item | null>(null);
 
   // --- 出入庫モーダル用のステート管理 ---
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
-  const [stockItem, setStockItem] = useState<typeof initialItems[0] | null>(null);
+  const [stockItem, setStockItem] = useState<Item | null>(null);
   const [stockMode, setStockMode] = useState<"消費" | "直接入庫">("消費");
   const [stockQuantity, setStockQuantity] = useState(1);
 
@@ -31,7 +36,7 @@ export default function SupplyDashboard() {
   const [sortKey, setSortKey] = useState<"none" | "stock-asc" | "stock-desc" | "name" | "location">("none");
 
   // --- 出入庫モーダルを開く処理 ---
-  const openStockModal = (item: typeof initialItems[0]) => {
+  const openStockModal = (item: Item) => {
     setStockItem({ ...item });
     setStockMode("消費");
     setStockQuantity(1);
@@ -66,7 +71,7 @@ export default function SupplyDashboard() {
     setStockItem(null);
   };
 
-  const openEditModal = (item: typeof initialItems[0]) => {
+  const openEditModal = (item: Item) => {
     setEditItem({ ...item });
     setIsEditOpen(true);
   };
@@ -78,6 +83,33 @@ export default function SupplyDashboard() {
     setEditItem(null);
   };
 
+// 画面表示時にSupabaseから備品一覧を取得
+useEffect(() => {
+  async function fetchItems() {
+    try {
+      const data = await getItems();
+
+      setItems(
+        data.map((item) => ({
+          ...item,
+
+          // 一時的に画面表示用のステータスを付与
+          status:
+            item.current_stock === 0
+              ? "在庫切れ"
+              : item.current_stock <= item.threshold_stock
+              ? "要補充"
+              : "正常",
+        }))
+      );
+    } catch (error) {
+      console.error("備品一覧取得エラー:", error);
+    }
+  }
+
+  fetchItems();
+}, []);
+
   // --- 【連動化】検索・フィルター・ソートを適用する処理 ---
   const processedItems = useMemo(() => {
     let result = [...items];
@@ -86,7 +118,7 @@ export default function SupplyDashboard() {
       result = result.filter(
         (item) =>
           item.name.toLowerCase().includes(query) ||
-          item.catalog_no.toLowerCase().includes(query) ||
+          (item.catalog_no ?? "").toLowerCase().includes(query) ||
           item.location.toLowerCase().includes(query)
       );
     }
@@ -118,11 +150,6 @@ export default function SupplyDashboard() {
           <div className="w-44">
             <Button href="/supply/requests" className="bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm py-2 border border-slate-300">
               📝 発注リクエストを作成
-            </Button>
-          </div>
-          <div className="w-36">
-            <Button onClick={() => setIsRegisterOpen(true)} className="bg-brand-dark hover:bg-brand-blue text-white font-semibold text-sm py-2">
-              + 新規備品登録
             </Button>
           </div>
         </div>
@@ -238,40 +265,6 @@ export default function SupplyDashboard() {
           </table>
         </div>
       </div>
-
-      {/* 新規登録モーダル */}
-      {isRegisterOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 relative">
-            <button onClick={() => setIsRegisterOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg cursor-pointer">✕</button>
-            <h3 className="text-base font-bold text-slate-800">備品の新規登録</h3>
-            <div className="space-y-3 text-xs text-slate-700">
-              <div>
-                <label className="block font-bold text-slate-600 mb-1">備品名 *</label>
-                <input type="text" placeholder="例：コピー用紙 A4" className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-600 mb-1">型番</label>
-                  <input type="text" placeholder="例：PPC-A4-500" className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-600 mb-1">単位</label>
-                  <input type="text" placeholder="包" className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
-                </div>
-              </div>
-              <div>
-                <label className="block font-bold text-slate-600 mb-1">保管場所 *</label>
-                <input type="text" placeholder="例：事務所 棚A-1" className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button onClick={() => setIsRegisterOpen(false)} className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-600 font-semibold text-xs rounded-lg transition-colors cursor-pointer">キャンセル</button>
-              <button onClick={() => setIsRegisterOpen(false)} className="px-4 py-2 bg-brand-dark text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer">登録する</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 編集モーダル */}
       {isEditOpen && editItem && (

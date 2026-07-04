@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Layout } from '@/components/Layout'; // 共通レイアウト
 import { Button } from '@/components/Button'; // 共通ボタン
+import { AddItemModal } from "@/components/AddItemModal";
 
 // 初期ダミーデータ（status, purchase_url, ordered_at を完備）
 const initialRequests = [
@@ -53,6 +54,9 @@ const initialRequests = [
 export default function AdminOrderRequestsPage() {
   const [requests, setRequests] = useState(initialRequests);
 
+   // 新規備品登録モーダルの開閉状態
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+
   // 【設計書仕様】発注完了にする処理
   const handleOrderComplete = (id: string, name: string) => {
     const now = new Date().toLocaleString('ja-JP');
@@ -64,7 +68,7 @@ export default function AdminOrderRequestsPage() {
     alert(`【発注処理完了】\n${name} を「発注済み」に更新しました。\n（自動挿入時刻: ${now}）`);
   };
 
-  // 【復活】削除ボタン（否認）を押した時の処理
+  // 削除ボタン（否認）を押した時の処理
   const handleDelete = (id: string, name: string) => {
     const confirmDelete = window.confirm(`【リクエストの削除確認】\n${name} のリクエストを一覧から削除しますか？\n（画面から非表示になります）`);
     if (confirmDelete) {
@@ -91,11 +95,27 @@ export default function AdminOrderRequestsPage() {
             </div>
             <p className="text-xs font-mono text-slate-500 tracking-widest uppercase mt-0.5">ORDER REQUEST APPROVAL</p>
           </div>
-          <div className="w-56">
-            <Button href="/supply" className="border border-slate-300 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50">
-              ← 在庫一覧（ダッシュボード）へ
-            </Button>
-          </div>
+          <div className="flex gap-2">
+  {/* 備品登録 */}
+  <div className="w-36">
+    <Button
+      onClick={() => setIsRegisterOpen(true)}
+      className="bg-brand-dark hover:bg-brand-blue text-white font-semibold text-sm py-2"
+    >
+      + 備品登録
+    </Button>
+  </div>
+
+  {/* ダッシュボードへ戻る */}
+  <div className="w-56">
+    <Button
+      href="/supply"
+      className="border border-slate-300 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50"
+    >
+      ← 在庫一覧（ダッシュボード）へ
+    </Button>
+  </div>
+</div>
         </div>
 
         {/* メインリスト（見やすかったテーブル風レイアウトをベースに改良） */}
@@ -231,6 +251,13 @@ export default function AdminOrderRequestsPage() {
         )}
         
       </div>
+
+      {/* 新規備品登録モーダル */}
+<AddItemModal
+  isOpen={isRegisterOpen}
+  onClose={() => setIsRegisterOpen(false)}
+/>
+
     </Layout>
   );
 }
