@@ -1,9 +1,8 @@
 import { supabase } from "@/lib/supabase";
-import { getUserById } from "@/services/users";
+import { getUserById, type User } from "@/services/users";
 
 // roleから遷移先を決める関数
-function getRedirectPath(role: string) {
-  switch (role) {
+function getRedirectPath(role: User["role"]) {
     case "役職":
       return "/supply/admin";
 
