@@ -47,11 +47,9 @@ export async function getItems() {
     .select("*")
     .order("created_at", { ascending: false });
 
-  // エラーがあれば呼び出し元へ返す
   if (error) {
     throw error;
   }
 
-  // 取得した備品一覧を返す
-  return data;
+  return data ?? [];
 }
