@@ -35,13 +35,21 @@ export async function login(email: string, password: string) {
     };
   }
 
-  const user = await getUserById(authUser.id);
+  try {
+    const user = await getUserById(authUser.id);
 
-  return {
-    user,
-    redirectTo: getRedirectPath(user.role),
-    error: null,
-  };
+    return {
+      user,
+      redirectTo: getRedirectPath(user.role),
+      error: null,
+    };
+  } catch (error: any) {
+    return {
+      error: {
+        message: error?.message ?? "ユーザー情報の取得に失敗しました。",
+      },
+    };
+  }
 }
 
 export async function getCurrentUser() {
