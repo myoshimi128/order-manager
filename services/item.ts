@@ -19,13 +19,12 @@ export async function createItem(item: CreateItemInput) {
       {
         // フォームで入力されたデータをitemsテーブルへ登録
         name: item.name,
-        catalog_no: item.catalog_no ?? null,
-        purchase_url: item.purchase_url ?? null,
+        catalog_no: item.catalog_no?.trim() ? item.catalog_no.trim() : null,
+        purchase_url: item.purchase_url?.trim() ? item.purchase_url.trim() : null,
         location: item.location,
         current_stock: item.current_stock ?? 0,
         threshold_stock: item.threshold_stock ?? 1,
-        unit: item.unit ?? "個",
-      },
+        unit: item.unit?.trim() ? item.unit.trim() : "個",
     ])
     // 登録したデータを取得
     .select()
