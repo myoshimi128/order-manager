@@ -8,10 +8,7 @@ type AddItemModalProps = {
   onClose: () => void;
 };
 
-export function AddItemModal({
-  isOpen,
-  onClose,
-}: AddItemModalProps) {
+export function AddItemModal({ isOpen, onClose }: AddItemModalProps) {
   // 入力値を管理
   const [name, setName] = useState("");
   const [catalogNo, setCatalogNo] = useState("");
@@ -21,19 +18,30 @@ export function AddItemModal({
   const [currentStock, setCurrentStock] = useState(0);
   const [thresholdStock, setThresholdStock] = useState(1);
 
+  // 送信中のローディング状態
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // 登録処理
   const handleRegister = async () => {
+    if (!name.trim() || !location.trim()) {
+      alert("備品名と保管場所は必須入力です。");
+      return;
+    }
+
+    setIsSubmitting(true);
+
     try {
-    await createItem({
+      await createItem({
         name,
-        catalog_no: catalogNo,
-        purchase_url: purchaseUrl,
+        catalog_no: catalogNo || undefined,
+        purchase_url: purchaseUrl || undefined,
         location,
         current_stock: currentStock,
         threshold_stock: thresholdStock,
         unit,
-    });
-      alert("備品を登録しました");
+      });
+
+      alert(`【登録完了】\n「${name}」を新規登録しました！`);
 
       // 入力内容をリセット
       setName("");
@@ -46,8 +54,10 @@ export function AddItemModal({
 
       onClose();
     } catch (error) {
-      console.error(error);
-      alert("登録に失敗しました");
+      console.error("備品登録エラー:", error);
+      alert("登録に失敗しました。もう一度お試しください。");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -58,7 +68,8 @@ export function AddItemModal({
       <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 relative">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg cursor-pointer"
+          disabled={isSubmitting}
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg cursor-pointer disabled:opacity-50"
         >
           ✕
         </button>
@@ -71,7 +82,7 @@ export function AddItemModal({
           {/* 備品名 */}
           <div>
             <label className="block font-bold text-slate-600 mb-1">
-              備品名 *
+              備品名 <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -82,53 +93,53 @@ export function AddItemModal({
             />
           </div>
 
-{/* 型番・単位 */}
-<div className="grid grid-cols-2 gap-3">
-  <div>
-    <label className="block font-bold text-slate-600 mb-1">
-      型番
-    </label>
-    <input
-      type="text"
-      value={catalogNo}
-      onChange={(e) => setCatalogNo(e.target.value)}
-      placeholder="例：PPC-A4-500"
-      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden"
-    />
-  </div>
+          {/* 型番・単位 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-600 mb-1">
+                型番
+              </label>
+              <input
+                type="text"
+                value={catalogNo}
+                onChange={(e) => setCatalogNo(e.target.value)}
+                placeholder="例：PPC-A4-500"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden"
+              />
+            </div>
 
-  <div>
-    <label className="block font-bold text-slate-600 mb-1">
-      単位
-    </label>
-    <input
-      type="text"
-      value={unit}
-      onChange={(e) => setUnit(e.target.value)}
-      placeholder="例：個"
-      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden"
-    />
-  </div>
-</div>
+            <div>
+              <label className="block font-bold text-slate-600 mb-1">
+                単位
+              </label>
+              <input
+                type="text"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder="例：個"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden"
+              />
+            </div>
+          </div>
 
-{/* 購入先URL */}
-<div>
-  <label className="block font-bold text-slate-600 mb-1">
-    購入先URL
-  </label>
-  <input
-    type="url"
-    value={purchaseUrl}
-    onChange={(e) => setPurchaseUrl(e.target.value)}
-    placeholder="https://example.com"
-    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden"
-  />
-</div>
+          {/* 購入先URL */}
+          <div>
+            <label className="block font-bold text-slate-600 mb-1">
+              購入先URL
+            </label>
+            <input
+              type="url"
+              value={purchaseUrl}
+              onChange={(e) => setPurchaseUrl(e.target.value)}
+              placeholder="https://example.com"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden"
+            />
+          </div>
 
           {/* 保管場所 */}
           <div>
             <label className="block font-bold text-slate-600 mb-1">
-              保管場所 *
+              保管場所 <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -150,7 +161,7 @@ export function AddItemModal({
                 min={0}
                 value={currentStock}
                 onChange={(e) => setCurrentStock(Number(e.target.value))}
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden font-bold"
               />
             </div>
 
@@ -163,7 +174,7 @@ export function AddItemModal({
                 min={0}
                 value={thresholdStock}
                 onChange={(e) => setThresholdStock(Number(e.target.value))}
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden font-bold"
               />
             </div>
           </div>
@@ -172,16 +183,18 @@ export function AddItemModal({
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-600 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+            disabled={isSubmitting}
+            className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-600 font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
           >
             キャンセル
           </button>
 
           <button
             onClick={handleRegister}
-            className="px-4 py-2 bg-brand-dark hover:bg-brand-blue text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+            disabled={isSubmitting}
+            className="px-4 py-2 bg-brand-dark hover:bg-brand-blue text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
           >
-            登録する
+            {isSubmitting ? "登録中..." : "登録する"}
           </button>
         </div>
       </div>

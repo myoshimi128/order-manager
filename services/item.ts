@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { createStockLog } from "@/services/stockLogs";
 
 // 備品登録時に受け取るデータの型
 export type CreateItemInput = {
@@ -11,32 +12,43 @@ export type CreateItemInput = {
   unit?: string;
 };
 
+// 備品更新時に受け取るデータの型
+export type UpdateItemInput = {
+  id: string;
+  name: string;
+  catalog_no?: string | null;
+  unit: string;
+  location: string;
+};
+
+// 出入庫移動時の入力型
+export type RecordStockMovementInput = {
+  itemId: string;
+  logType: "消費" | "直接入庫";
+  quantityChanged: number;
+  newStock: number;
+  userId: string;
+};
+
 // 備品を新規登録する処理
 export async function createItem(item: CreateItemInput) {
   const { data, error } = await supabase
     .from("items")
     .insert([
       {
-        // フォームで入力されたデータをitemsテーブルへ登録
         name: item.name,
-        catalog_no: item.catalog_no?.trim() ? item.catalog_no.trim() : null,
-        purchase_url: item.purchase_url?.trim() ? item.purchase_url.trim() : null,
+        catalog_no: item.catalog_no ?? null,
+        purchase_url: item.purchase_url ?? null,
         location: item.location,
         current_stock: item.current_stock ?? 0,
         threshold_stock: item.threshold_stock ?? 1,
-        unit: item.unit?.trim() ? item.unit.trim() : "個",
+        unit: item.unit ?? "個",
+      },
     ])
-    // 登録したデータを取得
     .select()
-    // 配列ではなく1件のデータとして受け取る
     .single();
 
-  // エラーがあれば呼び出し元へ返す
-  if (error) {
-    throw error;
-  }
-
-  // 登録した備品データを返す
+  if (error) throw error;
   return data;
 }
 
@@ -47,9 +59,60 @@ export async function getItems() {
     .select("*")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    throw error;
+  if (error) throw error;
+  return data;
+}
+
+// 備品情報を更新する処理 (編集モーダル用)
+export async function updateItemDetails({
+  id,
+  name,
+  catalog_no,
+  unit,
+  location,
+}: UpdateItemInput) {
+  const { data, error } = await supabase
+    .from("items")
+    .update({
+      name,
+      catalog_no: catalog_no ?? null,
+      unit,
+      location,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// 在庫数の更新 ＋ 履歴ログ追加（オーケストレーション処理）
+export async function recordStockMovement({
+  itemId,
+  logType,
+  quantityChanged,
+  newStock,
+  userId,
+}: RecordStockMovementInput) {
+  // 1. 在庫数を更新 (itemsテーブル)
+  const { error: itemError } = await supabase
+    .from("items")
+    .update({ current_stock: newStock })
+    .eq("id", itemId);
+
+  if (itemError) {
+    console.error("在庫数の更新に失敗しました:", itemError);
+    throw itemError;
   }
 
-  return data ?? [];
+  // 2. ログを追加 (stockLogs.ts の関数を実行)
+  await createStockLog({
+    itemId,
+    logType,
+    quantityChanged,
+    userId,
+  });
+
+  return true;
 }

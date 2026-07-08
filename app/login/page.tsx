@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { login } from "@/services/auth";
-import { Layout } from '@/components/Layout';
+import { PublicLayout } from '@/components/PublicLayout';
 import { Button } from '@/components/Button';
 
 export default function LoginPage() {
@@ -12,8 +11,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-
-  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -37,9 +34,8 @@ export default function LoginPage() {
       // チェック用のクッキーを発行（ミドルウェア突破用）
       document.cookie = "auth-token=true; path=/; max-age=86400;";
 
-      // roleに応じた画面へ移動
-      router.push(result.redirectTo);
-      router.refresh();
+      // 状態の不整合を防ぐため、フルリロードでロール対応画面へ遷移
+      window.location.href = result.redirectTo;
 
     } catch {
       setErrorMsg('予期せぬエラーが発生しました。');
@@ -49,7 +45,7 @@ export default function LoginPage() {
   };
 
   return (
-    <Layout>
+    <PublicLayout>
       <div className="w-full max-w-md z-10 flex flex-col items-center">
 
         {/* システムタイトル */}
@@ -154,6 +150,6 @@ export default function LoginPage() {
         </div>
 
       </div>
-    </Layout>
+    </PublicLayout>
   );
 }

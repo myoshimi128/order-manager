@@ -3,33 +3,18 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Layout } from "@/components/Layout"; 
 import { Button } from "@/components/Button";
-import { getItems } from "@/services/item";
-
-type Item = {
-  id: string;
-  name: string;
-  catalog_no: string | null;
-  purchase_url: string | null;
-  location: string;
-  current_stock: number;
-  threshold_stock: number;
-  unit: string;
-  created_at: string;
-
-   // 一時的に画面表示用
-  status?: string;
-};
+import { getCurrentUser } from "@/services/auth"; // ← getCurrentUser を追加
+import { StockModal, Item } from "@/components/StockModal";
+import { getItems, recordStockMovement, updateItemDetails } from "@/services/item";
 
 export default function SupplyDashboard() {
   const [items, setItems] = useState<Item[]>([]);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
 
-  // --- 出入庫モーダル用のステート管理 ---
-  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  // 出入庫モーダル用ステート
   const [stockItem, setStockItem] = useState<Item | null>(null);
-  const [stockMode, setStockMode] = useState<"消費" | "直接入庫">("消費");
-  const [stockQuantity, setStockQuantity] = useState(1);
+  const [isSaving, setIsSaving] = useState(false); // 保存中のローディング制御
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<"all" | "alert">("all");
@@ -37,38 +22,64 @@ export default function SupplyDashboard() {
 
   // --- 出入庫モーダルを開く処理 ---
   const openStockModal = (item: Item) => {
-    setStockItem({ ...item });
-    setStockMode("消費");
-    setStockQuantity(1);
-    setIsStockModalOpen(true);
+    setStockItem(item);
   };
 
-  // --- 出入庫の確定ロジック ---
-  const handleSaveStock = () => {
-    if (!stockItem) return;
+  // --- 出入庫の確定ロジック（Supabase & Auth 連携） ---
+  const handleSaveStock = async (itemId: string, mode: "消費" | "直接入庫", quantity: number) => {
+    const targetItem = items.find((i) => i.id === itemId);
+    if (!targetItem) return;
 
-    const change = stockMode === "消費" ? -stockQuantity : stockQuantity;
-    const nextStock = Math.max(0, stockItem.current_stock + change);
+    setIsSaving(true);
 
-    let nextStatus = "正常";
-    if (nextStock === 0) {
-      nextStatus = "在庫切れ";
-    } else if (nextStock <= stockItem.threshold_stock) {
-      nextStatus = stockItem.status === "発注済み" ? "発注済み" : "要補充";
+    try {
+      // 1. ログイン中のユーザー情報を取得
+      const { data: authData, error: authError } = await getCurrentUser();
+      
+      if (authError || !authData.user) {
+        alert("ログインセッションが切れています。再ログインしてください。");
+        return;
+      }
+
+      const userId = authData.user.id;
+
+      // 2. 新しい在庫数の計算
+      const change = mode === "消費" ? -quantity : quantity;
+      const nextStock = Math.max(0, targetItem.current_stock + change);
+
+      // 3. Supabase へ送信 (itemsの更新 ＋ stock_logsの追加)
+      await recordStockMovement({
+        itemId,
+        logType: mode,
+        quantityChanged: quantity,
+        newStock: nextStock,
+        userId: userId,
+      });
+
+      // 4. フロントエンド側の表示（State）を更新
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== itemId) return item;
+
+          let nextStatus = "正常";
+          if (nextStock === 0) {
+            nextStatus = "在庫切れ";
+          } else if (nextStock <= item.threshold_stock) {
+            nextStatus = item.status === "発注済み" ? "発注済み" : "要補充";
+          }
+
+          return { ...item, current_stock: nextStock, status: nextStatus };
+        })
+      );
+
+      // 5. 成功したらモーダルを閉じる
+      setStockItem(null);
+    } catch (error) {
+      console.error("出入庫処理エラー:", error);
+      alert("出入庫の記録に失敗しました。もう一度お試しください。");
+    } finally {
+      setIsSaving(false);
     }
-
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === stockItem.id
-          ? { ...item, current_stock: nextStock, status: nextStatus }
-          : item
-      )
-    );
-
-    console.log(`Supabase保存用: ID=${stockItem.id}, モード=${stockMode}, 変動数=${stockQuantity}`);
-
-    setIsStockModalOpen(false);
-    setStockItem(null);
   };
 
   const openEditModal = (item: Item) => {
@@ -76,41 +87,65 @@ export default function SupplyDashboard() {
     setIsEditOpen(true);
   };
 
-  const handleSaveEdit = () => {
+  // --- 備品情報編集の保存ロジック (Supabase連携版) ---
+  const handleSaveEdit = async () => {
     if (!editItem) return;
-    setItems((prev) => prev.map((item) => (item.id === editItem.id ? editItem : item)));
-    setIsEditOpen(false);
-    setEditItem(null);
+
+    if (!editItem.name.trim() || !editItem.location.trim()) {
+      alert("備品名と保管場所は必須入力です。");
+      return;
+    }
+
+    try {
+      // 1. Supabaseの items テーブルを更新
+      await updateItemDetails({
+        id: editItem.id,
+        name: editItem.name,
+        catalog_no: editItem.catalog_no,
+        unit: editItem.unit,
+        location: editItem.location,
+      });
+
+      // 2. フロントエンド側の表示（State）を更新
+      setItems((prev) =>
+        prev.map((item) => (item.id === editItem.id ? { ...editItem } : item))
+      );
+
+      // 3. モーダルを閉じる
+      setIsEditOpen(false);
+      setEditItem(null);
+    } catch (error) {
+      console.error("備品編集エラー:", error);
+      alert("備品情報の更新に失敗しました。もう一度お試しください。");
+    }
   };
 
-// 画面表示時にSupabaseから備品一覧を取得
-useEffect(() => {
-  async function fetchItems() {
-    try {
-      const data = await getItems();
+  // 画面表示時にSupabaseから備品一覧を取得
+  useEffect(() => {
+    async function fetchItems() {
+      try {
+        const data = await getItems();
 
-      setItems(
-        data.map((item) => ({
-          ...item,
-
-          // 一時的に画面表示用のステータスを付与
-          status:
-            item.current_stock === 0
-              ? "在庫切れ"
-              : item.current_stock <= item.threshold_stock
-              ? "要補充"
-              : "正常",
-        }))
-      );
-    } catch (error) {
-      console.error("備品一覧取得エラー:", error);
+        setItems(
+          data.map((item) => ({
+            ...item,
+            status:
+              item.current_stock === 0
+                ? "在庫切れ"
+                : item.current_stock <= item.threshold_stock
+                ? "要補充"
+                : "正常",
+          }))
+        );
+      } catch (error) {
+        console.error("備品一覧取得エラー:", error);
+      }
     }
-  }
 
-  fetchItems();
-}, []);
+    fetchItems();
+  }, []);
 
-  // --- 【連動化】検索・フィルター・ソートを適用する処理 ---
+  // 検索・フィルター・ソートを適用する処理
   const processedItems = useMemo(() => {
     let result = [...items];
     if (searchQuery.trim() !== "") {
@@ -132,14 +167,13 @@ useEffect(() => {
     return result;
   }, [items, searchQuery, filterMode, sortKey]);
 
-  // --- 【連動化】現在見えている中でのアラート数を数える ---
+  // アラート数を計算
   const displayAlertCount = useMemo(() => {
     return processedItems.filter((item) => item.status === "要補充" || item.status === "在庫切れ").length;
   }, [processedItems]);
 
   return (
     <Layout className="max-w-7xl space-y-6 my-6">
-      
       {/* ヘッダーエリア */}
       <div className="flex justify-between items-end">
         <div>
@@ -161,7 +195,7 @@ useEffect(() => {
           { title: "該当備品数", count: String(processedItems.length), sub: "件表示中", color: "text-slate-800" },
           { title: "在庫アラート", count: String(displayAlertCount), sub: "件 補充必要", color: "text-red-500" },
           { title: "発注リクエスト中", count: "2", sub: "件 承認待ち", color: "text-slate-800" },
-          { title: "今月の納品", count: "3", sub: "件 検収完了", color: "text-slate-800" }
+          { title: "今月の納品", count: "3", sub: "件 検収完了", color: "text-slate-800" },
         ].map((card, i) => (
           <div key={i} className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
             <div className="text-xs font-bold text-slate-500">{card.title}</div>
@@ -300,80 +334,15 @@ useEffect(() => {
         </div>
       )}
 
-      {/* 出入庫クイックモーダル */}
-      {isStockModalOpen && stockItem && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-800">{stockItem.name}</h3>
-              <p className="text-xs text-slate-400 mt-0.5">現在の在庫: <span className="font-bold text-slate-700">{stockItem.current_stock}</span> {stockItem.unit}</p>
-            </div>
-            <div className="p-5 space-y-5">
-              <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1.5">処理を選択</label>
-                <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
-                  <button
-                    type="button"
-                    onClick={() => setStockMode("消費")}
-                    className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      stockMode === "消費" ? "bg-red-500 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    🔴 消費 (出庫)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStockMode("直接入庫")}
-                    className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      stockMode === "直接入庫" ? "bg-emerald-50 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    🟢 直接入庫
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1.5">数量 ({stockItem.unit})</label>
-                <div className="flex items-center justify-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <button
-                    type="button"
-                    disabled={stockQuantity <= 1}
-                    onClick={() => setStockQuantity(q => q - 1)}
-                    className="w-10 h-10 bg-white border border-slate-300 rounded-full flex items-center justify-center font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white transition-all cursor-pointer shadow-xs"
-                  >
-                    －
-                  </button>
-                  <span className="text-lg font-bold w-12 text-center text-slate-800 font-mono">{stockQuantity}</span>
-                  <button
-                    type="button"
-                    onClick={() => setStockQuantity(q => q + 1)}
-                    className="w-10 h-10 bg-white border border-slate-300 rounded-full flex items-center justify-center font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-xs"
-                  >
-                    ＋
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => { setIsStockModalOpen(false); setStockItem(null); }}
-                className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-600 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveStock}
-                className={`px-5 py-2 text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer ${
-                  stockMode === "消費" ? "bg-red-500 hover:bg-red-600" : "bg-emerald-500 hover:bg-emerald-600"
-                }`}
-              >
-                {stockMode === "消費" ? "消費を確定する" : "入庫を確定する"}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* 出入庫モーダル */}
+      {stockItem && (
+        <StockModal
+          key={stockItem.id}
+          item={stockItem}
+          isSaving={isSaving} // 保存中のローディング表示制御
+          onClose={() => setStockItem(null)}
+          onSave={handleSaveStock}
+        />
       )}
     </Layout>
   );
