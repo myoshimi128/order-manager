@@ -3,18 +3,26 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Layout } from "@/components/Layout"; 
 import { Button } from "@/components/Button";
-import { getCurrentUser } from "@/services/auth"; // ← getCurrentUser を追加
+import { getCurrentUser } from "@/services/auth";
 import { StockModal, Item } from "@/components/StockModal";
-import { getItems, recordStockMovement, updateItemDetails } from "@/services/item";
+import { 
+  getItems, 
+  recordStockMovement, 
+  updateItemDetails, 
+  getItemStatus,
+  ItemStatusInfo 
+} from "@/services/item";
+import { getOrderRequests, OrderRequestWithItem } from "@/services/orderRequests";
 
 export default function SupplyDashboard() {
   const [items, setItems] = useState<Item[]>([]);
+  const [requestedItemIds, setRequestedItemIds] = useState<Set<string>>(new Set());
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
 
   // 出入庫モーダル用ステート
   const [stockItem, setStockItem] = useState<Item | null>(null);
-  const [isSaving, setIsSaving] = useState(false); // 保存中のローディング制御
+  const [isSaving, setIsSaving] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<"all" | "alert">("all");
@@ -25,7 +33,7 @@ export default function SupplyDashboard() {
     setStockItem(item);
   };
 
-  // --- 出入庫の確定ロジック（Supabase & Auth 連携） ---
+  // --- 出入庫の確定ロジック ---
   const handleSaveStock = async (itemId: string, mode: "消費" | "直接入庫", quantity: number) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem) return;
@@ -33,7 +41,6 @@ export default function SupplyDashboard() {
     setIsSaving(true);
 
     try {
-      // 1. ログイン中のユーザー情報を取得
       const { data: authData, error: authError } = await getCurrentUser();
       
       if (authError || !authData.user) {
@@ -43,11 +50,9 @@ export default function SupplyDashboard() {
 
       const userId = authData.user.id;
 
-      // 2. 新しい在庫数の計算
       const change = mode === "消費" ? -quantity : quantity;
       const nextStock = Math.max(0, targetItem.current_stock + change);
 
-      // 3. Supabase へ送信 (itemsの更新 ＋ stock_logsの追加)
       await recordStockMovement({
         itemId,
         logType: mode,
@@ -56,23 +61,13 @@ export default function SupplyDashboard() {
         userId: userId,
       });
 
-      // 4. フロントエンド側の表示（State）を更新
       setItems((prev) =>
         prev.map((item) => {
           if (item.id !== itemId) return item;
-
-          let nextStatus = "正常";
-          if (nextStock === 0) {
-            nextStatus = "在庫切れ";
-          } else if (nextStock <= item.threshold_stock) {
-            nextStatus = item.status === "発注済み" ? "発注済み" : "要補充";
-          }
-
-          return { ...item, current_stock: nextStock, status: nextStatus };
+          return { ...item, current_stock: nextStock };
         })
       );
 
-      // 5. 成功したらモーダルを閉じる
       setStockItem(null);
     } catch (error) {
       console.error("出入庫処理エラー:", error);
@@ -87,7 +82,7 @@ export default function SupplyDashboard() {
     setIsEditOpen(true);
   };
 
-  // --- 備品情報編集の保存ロジック (Supabase連携版) ---
+  // --- 備品情報編集の保存ロジック ---
   const handleSaveEdit = async () => {
     if (!editItem) return;
 
@@ -97,7 +92,6 @@ export default function SupplyDashboard() {
     }
 
     try {
-      // 1. Supabaseの items テーブルを更新
       await updateItemDetails({
         id: editItem.id,
         name: editItem.name,
@@ -106,12 +100,10 @@ export default function SupplyDashboard() {
         location: editItem.location,
       });
 
-      // 2. フロントエンド側の表示（State）を更新
       setItems((prev) =>
         prev.map((item) => (item.id === editItem.id ? { ...editItem } : item))
       );
 
-      // 3. モーダルを閉じる
       setIsEditOpen(false);
       setEditItem(null);
     } catch (error) {
@@ -120,34 +112,36 @@ export default function SupplyDashboard() {
     }
   };
 
-  // 画面表示時にSupabaseから備品一覧を取得
+  // 画面表示時に Supabase から備品一覧および発注リクエスト一覧を取得
   useEffect(() => {
-    async function fetchItems() {
+    async function fetchData() {
       try {
-        const data = await getItems();
+        const [itemsData, requestsData] = await Promise.all([
+          getItems(),
+          getOrderRequests(),
+        ]);
 
-        setItems(
-          data.map((item) => ({
-            ...item,
-            status:
-              item.current_stock === 0
-                ? "在庫切れ"
-                : item.current_stock <= item.threshold_stock
-                ? "要補充"
-                : "正常",
-          }))
+        setItems(itemsData);
+
+        // 未完了（リクエスト中 / 発注済み）のリクエストがある item_id を抽出
+        const activeItemIds = new Set<string>(
+          (requestsData as OrderRequestWithItem[])
+            .filter((req: OrderRequestWithItem) => req.status === "リクエスト中" || req.status === "発注済み")
+            .map((req: OrderRequestWithItem) => req.item_id)
         );
+        setRequestedItemIds(activeItemIds);
       } catch (error) {
-        console.error("備品一覧取得エラー:", error);
+        console.error("データ取得エラー:", error);
       }
     }
 
-    fetchItems();
+    fetchData();
   }, []);
 
   // 検索・フィルター・ソートを適用する処理
   const processedItems = useMemo(() => {
     let result = [...items];
+
     if (searchQuery.trim() !== "") {
       const query = searchQuery.toLowerCase();
       result = result.filter(
@@ -157,20 +151,32 @@ export default function SupplyDashboard() {
           item.location.toLowerCase().includes(query)
       );
     }
+
+    // アラート（要補充・在庫切れ・リクエスト中）のフィルタリング
     if (filterMode === "alert") {
-      result = result.filter((item) => item.status === "要補充" || item.status === "在庫切れ");
+      result = result.filter((item) => {
+        const hasReq = requestedItemIds.has(item.id);
+        const statusInfo: ItemStatusInfo = getItemStatus(item.current_stock, item.threshold_stock, hasReq);
+        return statusInfo.status !== "in_stock";
+      });
     }
+
     if (sortKey === "stock-asc") result.sort((a, b) => a.current_stock - b.current_stock);
     else if (sortKey === "stock-desc") result.sort((a, b) => b.current_stock - a.current_stock);
     else if (sortKey === "name") result.sort((a, b) => a.name.localeCompare(b.name, "ja"));
     else if (sortKey === "location") result.sort((a, b) => a.location.localeCompare(b.location, "ja"));
-    return result;
-  }, [items, searchQuery, filterMode, sortKey]);
 
-  // アラート数を計算
+    return result;
+  }, [items, requestedItemIds, searchQuery, filterMode, sortKey]);
+
+  // アラート数を計算（要補充または在庫切れの件数）
   const displayAlertCount = useMemo(() => {
-    return processedItems.filter((item) => item.status === "要補充" || item.status === "在庫切れ").length;
-  }, [processedItems]);
+    return items.filter((item) => {
+      const hasReq = requestedItemIds.has(item.id);
+      const statusInfo: ItemStatusInfo = getItemStatus(item.current_stock, item.threshold_stock, hasReq);
+      return statusInfo.status === "low_stock" || statusInfo.status === "out_of_stock";
+    }).length;
+  }, [items, requestedItemIds]);
 
   return (
     <Layout className="max-w-7xl space-y-6 my-6">
@@ -194,7 +200,7 @@ export default function SupplyDashboard() {
         {[
           { title: "該当備品数", count: String(processedItems.length), sub: "件表示中", color: "text-slate-800" },
           { title: "在庫アラート", count: String(displayAlertCount), sub: "件 補充必要", color: "text-red-500" },
-          { title: "発注リクエスト中", count: "2", sub: "件 承認待ち", color: "text-slate-800" },
+          { title: "発注リクエスト中", count: String(requestedItemIds.size), sub: "件 処理中", color: "text-blue-600" },
           { title: "今月の納品", count: "3", sub: "件 検収完了", color: "text-slate-800" },
         ].map((card, i) => (
           <div key={i} className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
@@ -223,7 +229,7 @@ export default function SupplyDashboard() {
                 すべて ({items.length})
               </button>
               <button onClick={() => setFilterMode("alert")} className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1 ${filterMode === "alert" ? "bg-red-500 text-white shadow-xs" : "text-red-500 hover:bg-slate-50"}`}>
-                アラートのみ ({items.filter((item) => item.status === "要補充" || item.status === "在庫切れ").length})
+                アラートのみ ({displayAlertCount})
               </button>
             </div>
           </div>
@@ -258,7 +264,10 @@ export default function SupplyDashboard() {
                 </tr>
               ) : (
                 processedItems.map((item) => {
-                  const isAlert = item.status === "要補充" || item.status === "在庫切れ";
+                  const hasReq = requestedItemIds.has(item.id);
+                  const statusInfo: ItemStatusInfo = getItemStatus(item.current_stock, item.threshold_stock, hasReq);
+                  const isAlert = statusInfo.status === "low_stock" || statusInfo.status === "out_of_stock";
+
                   return (
                     <tr key={item.id} className={`hover:bg-slate-50/80 transition-colors ${isAlert ? "bg-red-50/20" : ""}`}>
                       <td className="px-6 py-4">
@@ -273,10 +282,13 @@ export default function SupplyDashboard() {
                       <td className="px-6 py-4 text-slate-400 text-xs">{item.threshold_stock} {item.unit}</td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${
-                          item.status === "正常" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                          item.status === "発注済み" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                          item.status === "要補充" ? "bg-orange-50 text-orange-600 border-orange-100" : "bg-red-100 text-red-700 border-red-200"
-                        }`}>{item.status}</span>
+                          statusInfo.status === "in_stock" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                          statusInfo.status === "requested" ? "bg-blue-50 text-blue-600 border-blue-100" :
+                          statusInfo.status === "low_stock" ? "bg-orange-50 text-orange-600 border-orange-100" :
+                          "bg-red-100 text-red-700 border-red-200"
+                        }`}>
+                          {statusInfo.label}
+                        </span>
                       </td>
                       <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
                         <button 
@@ -339,7 +351,7 @@ export default function SupplyDashboard() {
         <StockModal
           key={stockItem.id}
           item={stockItem}
-          isSaving={isSaving} // 保存中のローディング表示制御
+          isSaving={isSaving}
           onClose={() => setStockItem(null)}
           onSave={handleSaveStock}
         />

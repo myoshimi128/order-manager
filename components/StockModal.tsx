@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 
+// DB構成に合わせて status カラムを除外した Item 型
 export type Item = {
   id: string;
   name: string;
@@ -10,7 +11,6 @@ export type Item = {
   current_stock: number;
   threshold_stock: number;
   unit: string;
-  status: string;
 };
 
 type StockModalProps = {

@@ -7,6 +7,26 @@ export type CreateOrderRequestInput = {
   comment?: string;
 };
 
+// 既存の型定義の近くに追加
+export type OrderRequestWithItem = {
+  id: string;
+  item_id: string;
+  request_quantity: number;
+  status: string;
+  comment?: string | null;
+  requested_by_user_id?: string;
+  created_at?: string;
+  ordered_at?: string | null;
+  items?: {
+    id: string;
+    name: string;
+    catalog_no?: string | null;
+    unit: string;
+    location: string;
+    purchase_url?: string | null;
+  } | null;
+};
+
 // SupabaseへのINSERT用型定義（any回避）
 type OrderRequestPayload = {
   item_id: string;

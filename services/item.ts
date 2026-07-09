@@ -1,7 +1,68 @@
 import { supabase } from "@/lib/supabase";
 import { createStockLog } from "@/services/stockLogs";
 
-// 備品登録時に受け取るデータの型
+// --- ステータス判定用の型定義と判定関数 ---
+export type ItemStatus = "out_of_stock" | "requested" | "low_stock" | "in_stock";
+
+export interface ItemStatusInfo {
+  status: ItemStatus;
+  label: string;
+  color: string;
+}
+
+/**
+ * 在庫数(current_stock)、しきい値(threshold_stock)、未完了リクエストの有無からステータスを算出
+ */
+export function getItemStatus(
+  currentStock: number,
+  thresholdStock: number,
+  hasActiveRequest: boolean = false
+): ItemStatusInfo {
+  // 1. 在庫切れ
+  if (currentStock <= 0) {
+    return {
+      status: "out_of_stock",
+      label: "在庫切れ",
+      color: "red",
+    };
+  }
+
+  // 2. 基準数以下の場合の分岐
+  if (currentStock <= thresholdStock) {
+    if (hasActiveRequest) {
+      return {
+        status: "requested",
+        label: "リクエスト中",
+        color: "blue",
+      };
+    }
+    return {
+      status: "low_stock",
+      label: "要補充",
+      color: "yellow",
+    };
+  }
+
+  // 3. 在庫十分
+  return {
+    status: "in_stock",
+    label: "在庫あり",
+    color: "green",
+  };
+}
+
+export type Item = {
+  id: string;
+  name: string;
+  catalog_no?: string | null;
+  purchase_url?: string | null;
+  location: string;
+  current_stock: number;
+  threshold_stock: number;
+  unit: string;
+  created_at?: string;
+};
+
 export type CreateItemInput = {
   name: string;
   catalog_no?: string;
@@ -12,7 +73,6 @@ export type CreateItemInput = {
   unit?: string;
 };
 
-// 備品更新時に受け取るデータの型
 export type UpdateItemInput = {
   id: string;
   name: string;
@@ -21,7 +81,6 @@ export type UpdateItemInput = {
   location: string;
 };
 
-// 出入庫移動時の入力型
 export type RecordStockMovementInput = {
   itemId: string;
   logType: "消費" | "直接入庫";
@@ -30,7 +89,6 @@ export type RecordStockMovementInput = {
   userId: string;
 };
 
-// 備品を新規登録する処理
 export async function createItem(item: CreateItemInput) {
   const { data, error } = await supabase
     .from("items")
@@ -52,18 +110,16 @@ export async function createItem(item: CreateItemInput) {
   return data;
 }
 
-// 備品一覧を取得する処理
-export async function getItems() {
+export async function getItems(): Promise<Item[]> {
   const { data, error } = await supabase
     .from("items")
     .select("*")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return data;
+  return data ?? [];
 }
 
-// 備品情報を更新する処理 (編集モーダル用)
 export async function updateItemDetails({
   id,
   name,
@@ -87,7 +143,6 @@ export async function updateItemDetails({
   return data;
 }
 
-// 在庫数の更新 ＋ 履歴ログ追加（オーケストレーション処理）
 export async function recordStockMovement({
   itemId,
   logType,
@@ -95,7 +150,6 @@ export async function recordStockMovement({
   newStock,
   userId,
 }: RecordStockMovementInput) {
-  // 1. 在庫数を更新 (itemsテーブル)
   const { error: itemError } = await supabase
     .from("items")
     .update({ current_stock: newStock })
@@ -106,7 +160,6 @@ export async function recordStockMovement({
     throw itemError;
   }
 
-  // 2. ログを追加 (stockLogs.ts の関数を実行)
   await createStockLog({
     itemId,
     logType,
