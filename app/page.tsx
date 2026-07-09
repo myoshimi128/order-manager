@@ -2,20 +2,22 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getCurrentAppUser, getRedirectPath } from "@/services/auth";
 
 export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
     async function checkUser() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // Authとusersテーブルからロール含むユーザー情報を取得
+      const user = await getCurrentAppUser();
 
       if (user) {
-        router.replace("/portal");
+        // 役職なら /supply/admin、一般/現場なら /supply など適切なページへ飛ばす
+        const targetPath = getRedirectPath(user.role);
+        router.replace(targetPath);
       } else {
+        // 未ログインならログイン画面へ
         router.replace("/login");
       }
     }
@@ -23,5 +25,11 @@ export default function HomePage() {
     checkUser();
   }, [router]);
 
-  return <p>読み込み中...</p>;
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <p className="text-xs font-bold text-slate-400 animate-pulse">
+        認証状態を確認中...
+      </p>
+    </div>
+  );
 }

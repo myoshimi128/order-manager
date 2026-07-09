@@ -1,59 +1,110 @@
 "use client";
 
-import React, { useState, useTransition, Suspense } from "react";
+import React, { useState, useEffect, useTransition, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/Button";
+import { getItems } from "@/services/item";
+import { getCurrentUser } from "@/services/auth";
+import { createOrderRequest } from "@/services/orderRequests";
 
-const allItemsList = [
-  { id: "1", name: "コピー用紙 A4", catalog_no: "PPC-A4-500", current_stock: 3, unit: "本" },
-  { id: "2", name: "ボールペン（黒）", catalog_no: "BP-BLK-10", current_stock: 12, unit: "本" },
-  { id: "3", name: "養生テープ", catalog_no: "YT-50", current_stock: 1, unit: "個" },
-  { id: "4", name: "軍手（M）", catalog_no: "GG-M-12P", current_stock: 6, unit: "双" },
-  { id: "5", name: "インクカートリッジ BCI-381", catalog_no: "BCI-381PGBK", current_stock: 2, unit: "個" },
-  { id: "6", name: "安全靴（27cm）", catalog_no: "SS-270-JIS", current_stock: 4, unit: "足" },
-  { id: "7", name: "清掃用モップ", catalog_no: "MOP-60", current_stock: 0, unit: "本" },
-];
+// 画面内で使うアイテムの型定義
+type ItemOption = {
+  id: string;
+  name: string;
+  catalog_no?: string | null;
+  current_stock: number;
+  unit: string;
+};
 
 // フォーム本体
 function OrderRequestForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-  
+
+  const [items, setItems] = useState<ItemOption[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const paramItemId = searchParams.get("itemId");
-
-  // 初期選択アイテムの判定
-  const [selectedItemId, setSelectedItemId] = useState(() => {
-    if (paramItemId && allItemsList.some(item => item.id === paramItemId)) {
-      return paramItemId;
-    }
-    return allItemsList[0].id;
-  });
-
+  const [selectedItemId, setSelectedItemId] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
   const [comment, setComment] = useState("");
 
-  const currentItem = allItemsList.find(item => item.id === selectedItemId);
+  // 1. 画面読み込み時に Supabase から実際の備品一覧（items）を取得
+  useEffect(() => {
+    async function fetchItems() {
+      try {
+        const data = await getItems();
+        setItems(data);
 
-  // 送信処理
+        // URLパラメータ（itemId）があればその備品を初期選択、無ければ1番目の備品を選択
+        if (paramItemId && data.some((item) => item.id === paramItemId)) {
+          setSelectedItemId(paramItemId);
+        } else if (data.length > 0) {
+          setSelectedItemId(data[0].id);
+        }
+      } catch (error) {
+        console.error("備品一覧の取得に失敗しました:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchItems();
+  }, [paramItemId]);
+
+  const currentItem = items.find((item) => item.id === selectedItemId);
+
+  // 2. 送信処理（Supabase の order_requests テーブルへ保存）
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    if (!selectedItemId) {
+      alert("備品を選択してください。");
+      return;
+    }
+
     startTransition(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      alert(`【申請完了】\n${currentItem?.name} を ${quantity} ${currentItem?.unit} 発注リクエストしました！`);
-      router.push("/supply");
+      try {
+        // ログインユーザーのIDを取得
+        const { data: authData, error: authError } = await getCurrentUser();
+
+        if (authError || !authData.user) {
+          alert("ログインセッションが切れています。再ログインしてください。");
+          return;
+        }
+
+        // Supabaseへ申請データを保存
+        await createOrderRequest({
+          itemId: selectedItemId,
+          requestQuantity: quantity,
+          userId: authData.user.id,
+          comment: comment,
+        });
+
+        alert(`【申請完了】\n${currentItem?.name} を ${quantity} ${currentItem?.unit} 発注リクエストしました！`);
+        router.push("/supply");
+      } catch (error) {
+        console.error("発注リクエストエラー:", error);
+        alert("リクエストの送信に失敗しました。もう一度お試しください。");
+      }
     });
   };
 
+  if (loading) {
+    return (
+      <div className="flex-1 p-8 flex items-center justify-center text-xs text-slate-400 font-medium">
+        データを読み込み中...
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-6 z-10 relative">
-      
       {/* タイトルエリア */}
       <div className="space-y-2">
         <div className="w-36">
-          {/* variantを削除してclassNameで白背景ボタンに修正 */}
           <Button href="/supply" className="text-xs text-slate-500 py-1 font-medium bg-white hover:bg-slate-50 border border-slate-200">
             ← 在庫一覧に戻る
           </Button>
@@ -78,9 +129,9 @@ function OrderRequestForm() {
               onChange={(e) => setSelectedItemId(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-sm focus:outline-hidden focus:border-brand-blue font-medium"
             >
-              {allItemsList.map((item) => (
+              {items.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name} （型番: {item.catalog_no} / 現在庫: {item.current_stock}{item.unit}）
+                  {item.name} （型番: {item.catalog_no || "なし"} / 現在庫: {item.current_stock}{item.unit}）
                 </option>
               ))}
             </select>
@@ -124,7 +175,6 @@ function OrderRequestForm() {
           {/* 下部ボタン */}
           <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
             <div className="w-28">
-              {/* キャンセルボタンもvariantを削って通常の白ボタンに修正 */}
               <Button href="/supply" className="text-xs py-2.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-600">
                 キャンセル
               </Button>
@@ -142,7 +192,6 @@ function OrderRequestForm() {
 
         </form>
       </div>
-
     </div>
   );
 }
@@ -150,7 +199,6 @@ function OrderRequestForm() {
 // ページ全体（Suspenseラップ）
 export default function OrderRequestFormPage() {
   return (
-    // ✨ 在庫一覧と同じ max-w-7xl を指定してサイズ感を完璧に統一する！
     <Layout className="max-w-7xl space-y-6 my-6">
       <Suspense fallback={
         <div className="flex-1 p-8 flex items-center justify-center text-xs text-slate-400 font-medium">
