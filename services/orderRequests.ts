@@ -35,7 +35,7 @@ export async function createOrderRequest({
       activeUserId = user?.id;
     }
 
-    // 型を明示してペロードを作成
+    // 型を明示してペイロードを作成
     const payload: OrderRequestPayload = {
       item_id: itemId,
       request_quantity: Number(requestQuantity),
