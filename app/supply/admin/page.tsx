@@ -1,13 +1,17 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/Button";
 import { AddItemModal } from "@/components/AddItemModal";
+import { getCurrentAppUser } from "@/services/auth";
 import {
   getOrderRequests,
   updateOrderRequestStatus,
   deleteOrderRequest,
+  confirmDelivery,
+  ORDER_REQUEST_STATUS,
 } from "@/services/orderRequests";
 
 // Supabaseからの取得レスポンス用の型定義
@@ -17,7 +21,7 @@ type OrderRequestResponse = {
   status: string;
   comment: string | null;
   created_at: string;
-  ordered_at: string | null;
+  approved_at: string | null;
   item_id: string;
   items: {
     name: string;
@@ -41,10 +45,11 @@ type RequestUIItem = {
   date: string;
   status: string;
   purchase_url: string;
-  ordered_at: string | null;
+  approved_at: string | null;
 };
 
 export default function AdminOrderRequestsPage() {
+  const router = useRouter();
   const [requests, setRequests] = useState<RequestUIItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
@@ -70,10 +75,10 @@ export default function AdminOrderRequestsPage() {
           date: item.created_at
             ? new Date(item.created_at).toLocaleDateString("ja-JP")
             : "-",
-          status: item.status || "リクエスト中",
+          status: item.status || ORDER_REQUEST_STATUS.PENDING,
           purchase_url: itemDetail?.purchase_url || "#",
-          ordered_at: item.ordered_at
-            ? new Date(item.ordered_at).toLocaleString("ja-JP")
+          approved_at: item.approved_at
+            ? new Date(item.approved_at).toLocaleString("ja-JP")
             : null,
         };
       });
@@ -86,64 +91,60 @@ export default function AdminOrderRequestsPage() {
     }
   };
 
-  // 初回ロード（useEffect内での重複を整理しシンプルに呼出）
+  // 権限チェック（役職ユーザーのみ許可）→ 通過後に初回ロード
   useEffect(() => {
     let isMounted = true;
 
-    const init = async () => {
-      try {
-        const data = await getOrderRequests();
-        if (!isMounted) return;
+    (async () => {
+      const currentUser = await getCurrentAppUser();
+      if (!isMounted) return;
 
-        const formatted: RequestUIItem[] = (
-          (data as unknown as OrderRequestResponse[]) || []
-        ).map((item) => {
-          const itemDetail = item.items;
-          return {
-            id: item.id,
-            name: itemDetail?.name || "不明な備品",
-            catalog_no: itemDetail?.catalog_no || "なし",
-            quantity: item.request_quantity || 0,
-            unit: itemDetail?.unit || "個",
-            location: itemDetail?.location || "保管場所未設定",
-            requester: "現場スタッフ",
-            comment: item.comment || "なし",
-            date: item.created_at
-              ? new Date(item.created_at).toLocaleDateString("ja-JP")
-              : "-",
-            status: item.status || "リクエスト中",
-            purchase_url: itemDetail?.purchase_url || "#",
-            ordered_at: item.ordered_at
-              ? new Date(item.ordered_at).toLocaleString("ja-JP")
-              : null,
-          };
-        });
-
-        setRequests(formatted);
-      } catch (err) {
-        console.error("初期データ取得エラー:", err);
-      } finally {
-        if (isMounted) setLoading(false);
+      if (!currentUser) {
+        router.replace("/login");
+        return;
       }
-    };
+      if (currentUser.role !== "役職") {
+        router.replace("/supply");
+        return;
+      }
 
-    init();
+      await loadRequests();
+    })();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [router]);
 
-  // 【発注完了】Supabase上のステータスを「発注済み」に更新
+  // 【承認】Supabase上のステータスを「納品待ち」に更新
   const handleOrderComplete = async (id: string, name: string) => {
     try {
       setLoading(true);
-      await updateOrderRequestStatus(id, "納品待ち");
+      await updateOrderRequestStatus(id, ORDER_REQUEST_STATUS.APPROVED);
       alert(`【承認完了】\n${name} を「納品待ち」に更新しました。`);
       await loadRequests();
     } catch (err) {
       console.error("発注完了エラー:", err);
       alert("発注完了処理に失敗しました。");
+      setLoading(false);
+    }
+  };
+
+  // 【納品確認】現物到着後にステータスを「納品済み」に更新
+  const handleConfirmDelivery = async (id: string, name: string) => {
+    try {
+      setLoading(true);
+      const result = await confirmDelivery(id);
+      if (!result.success) {
+        alert(result.error || "納品確認に失敗しました。");
+        return;
+      }
+      alert(`「${name}」の納品を確認しました。`);
+      await loadRequests();
+    } catch (err) {
+      console.error("納品確認エラー:", err);
+      alert("納品確認処理に失敗しました。");
+    } finally {
       setLoading(false);
     }
   };
@@ -168,8 +169,12 @@ export default function AdminOrderRequestsPage() {
   };
 
   // 未処理と処理済みに分類
-  const activeRequests = requests.filter((req) => req.status === "リクエスト中");
-  const completedRequests = requests.filter((req) => req.status === "発注済み");
+  const activeRequests = requests.filter(
+    (req) => req.status === ORDER_REQUEST_STATUS.PENDING
+  );
+  const completedRequests = requests.filter(
+    (req) => req.status !== ORDER_REQUEST_STATUS.PENDING
+  );
 
   return (
     <Layout className="max-w-7xl space-y-6 my-6">
@@ -346,7 +351,8 @@ export default function AdminOrderRequestsPage() {
                     <th className="p-4">ID / 備品名</th>
                     <th className="p-4">発注数量</th>
                     <th className="p-4">状態</th>
-                    <th className="p-4 text-right">発注完了時刻 (ordered_at)</th>
+                    <th className="p-4">承認完了時刻</th>
+                    <th className="p-4 text-right">アクション</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-600 font-medium">
@@ -368,8 +374,19 @@ export default function AdminOrderRequestsPage() {
                           {req.status}
                         </span>
                       </td>
-                      <td className="p-4 text-right font-mono text-slate-400">
-                        {req.ordered_at}
+                      <td className="p-4 font-mono text-slate-400">
+                        {req.approved_at ?? "-"}
+                      </td>
+                      <td className="p-4 text-right">
+                        {req.status === ORDER_REQUEST_STATUS.APPROVED && (
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmDelivery(req.id, req.name)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] py-1.5 px-3 rounded-md transition-colors cursor-pointer"
+                          >
+                            📦 納品確認
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

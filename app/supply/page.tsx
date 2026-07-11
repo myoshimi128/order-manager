@@ -12,7 +12,7 @@ import {
   getItemStatus,
   ItemStatusInfo 
 } from "@/services/item";
-import { getOrderRequests, OrderRequestWithItem } from "@/services/orderRequests";
+import { getOrderRequests, OrderRequestWithItem, ORDER_REQUEST_STATUS } from "@/services/orderRequests";
 
 export default function SupplyDashboard() {
   const [items, setItems] = useState<Item[]>([]);
@@ -57,6 +57,7 @@ export default function SupplyDashboard() {
         itemId,
         logType: mode,
         quantityChanged: quantity,
+        previousStock: targetItem.current_stock,
         newStock: nextStock,
         userId: userId,
       });
@@ -71,7 +72,17 @@ export default function SupplyDashboard() {
       setStockItem(null);
     } catch (error) {
       console.error("出入庫処理エラー:", error);
-      alert("出入庫の記録に失敗しました。もう一度お試しください。");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "出入庫の記録に失敗しました。もう一度お試しください。";
+      alert(message);
+      // 在庫が他の操作で変わっている可能性があるため最新状態を再取得する
+      try {
+        setItems(await getItems());
+      } catch (refetchError) {
+        console.error("在庫再取得エラー:", refetchError);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -123,10 +134,14 @@ export default function SupplyDashboard() {
 
         setItems(itemsData);
 
-        // 未完了（リクエスト中 / 発注済み）のリクエストがある item_id を抽出
+        // 未完了（承認待ち / 納品待ち）のリクエストがある item_id を抽出
         const activeItemIds = new Set<string>(
           (requestsData as OrderRequestWithItem[])
-            .filter((req: OrderRequestWithItem) => req.status === "リクエスト中" || req.status === "発注済み")
+            .filter(
+              (req: OrderRequestWithItem) =>
+                req.status === ORDER_REQUEST_STATUS.PENDING ||
+                req.status === ORDER_REQUEST_STATUS.APPROVED
+            )
             .map((req: OrderRequestWithItem) => req.item_id)
         );
         setRequestedItemIds(activeItemIds);

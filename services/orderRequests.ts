@@ -1,5 +1,16 @@
 import { supabase } from "@/lib/supabase";
 
+// order_requests.status の正規語彙（画面側はこの定数を参照すること）
+export const ORDER_REQUEST_STATUS = {
+  PENDING: "承認待ち",
+  APPROVED: "納品待ち",
+  DELIVERED: "納品済み",
+  REJECTED: "却下",
+} as const;
+
+export type OrderRequestStatus =
+  (typeof ORDER_REQUEST_STATUS)[keyof typeof ORDER_REQUEST_STATUS];
+
 export type CreateOrderRequestInput = {
   itemId: string;
   requestQuantity: number;
@@ -41,7 +52,7 @@ type OrderRequestPayload = {
 
 // 🛠️ ステータス更新用の型定義を追加（any回避）
 type OrderRequestUpdatePayload = {
-  status: "納品待ち" | "却下";
+  status: typeof ORDER_REQUEST_STATUS.APPROVED | typeof ORDER_REQUEST_STATUS.REJECTED;
   approved_at?: string | null;
   rejected_at?: string | null;
   rejected_reason?: string | null;
@@ -71,7 +82,7 @@ export async function createOrderRequest({
     const payload: OrderRequestPayload = {
       item_id: itemId,
       request_quantity: Number(requestQuantity),
-      status: "承認待ち",
+      status: ORDER_REQUEST_STATUS.PENDING,
       comment: comment && comment.trim() !== "" ? comment.trim() : null,
     };
 
@@ -152,18 +163,18 @@ export async function getOrderRequests() {
  * - 却下の場合は理由（rejectedReason）をオプショナルで受け取る
  */
 export async function updateOrderRequestStatus(
-  id: string, 
-  status: "納品待ち" | "却下", 
+  id: string,
+  status: typeof ORDER_REQUEST_STATUS.APPROVED | typeof ORDER_REQUEST_STATUS.REJECTED,
   rejectedReason?: string
 ) {
   const now = new Date().toISOString();
-  
+
   // 🛠️ anyを排除し、型安全なオブジェクトとして定義
   const updateData: OrderRequestUpdatePayload = { status };
-  
-  if (status === "納品待ち") {
+
+  if (status === ORDER_REQUEST_STATUS.APPROVED) {
     updateData.approved_at = now;
-  } else if (status === "却下") {
+  } else if (status === ORDER_REQUEST_STATUS.REJECTED) {
     updateData.rejected_at = now;
     updateData.rejected_reason = rejectedReason || null;
   }
