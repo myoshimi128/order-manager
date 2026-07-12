@@ -7,16 +7,19 @@ export type CreateOrderRequestInput = {
   comment?: string;
 };
 
-// 既存の型定義の近くに追加
 export type OrderRequestWithItem = {
   id: string;
   item_id: string;
   request_quantity: number;
-  status: string;
+  status: string; // '承認待ち', '納品待ち', '納品済み', '却下'
   comment?: string | null;
   requested_by_user_id?: string;
   created_at?: string;
-  ordered_at?: string | null;
+  approved_at?: string | null;  // 旧 ordered_at から変更
+  rejected_at?: string | null;  // 追加
+  rejected_reason?: string | null;
+  delivered_at?: string | null;
+  delivered_by?: string | null; // 追加
   items?: {
     id: string;
     name: string;
@@ -36,8 +39,17 @@ type OrderRequestPayload = {
   requested_by_user_id?: string;
 };
 
+// 🛠️ ステータス更新用の型定義を追加（any回避）
+type OrderRequestUpdatePayload = {
+  status: "納品待ち" | "却下";
+  approved_at?: string | null;
+  rejected_at?: string | null;
+  rejected_reason?: string | null;
+};
+
 /**
  * 1. 発注リクエストを作成する処理 (一般ユーザー用)
+ * - 初期ステータスを「承認待ち」に設定
  * - コメントが空の場合も安全に送信可能
  * - userIdが渡されない場合は現在のログインセッションから自動補完
  */
@@ -59,7 +71,7 @@ export async function createOrderRequest({
     const payload: OrderRequestPayload = {
       item_id: itemId,
       request_quantity: Number(requestQuantity),
-      status: "リクエスト中",
+      status: "承認待ち",
       comment: comment && comment.trim() !== "" ? comment.trim() : null,
     };
 
@@ -86,7 +98,7 @@ export async function createOrderRequest({
 }
 
 /**
- * 2. リクエスト一覧を取得する処理 (管理者用)
+ * 2. リクエスト一覧を取得する処理 (管理者用・一般履歴用 共通)
  * - itemsテーブルとのリレーション設定がなくてもエラーにならない安全な2段階取得
  */
 export async function getOrderRequests() {
@@ -128,7 +140,7 @@ export async function getOrderRequests() {
     return requests.map((req) => ({
       ...req,
       items: itemsMap.get(req.item_id) || null,
-    }));
+    })) as OrderRequestWithItem[];
   } catch (error) {
     console.error("getOrderRequests エラー:", error);
     throw error;
@@ -136,16 +148,29 @@ export async function getOrderRequests() {
 }
 
 /**
- * 3. ステータスを「発注済み」に更新する処理 (管理者用)
+ * 3. ステータスを「承認（納品待ち）」または「却下」に更新する処理 (管理者用)
+ * - 却下の場合は理由（rejectedReason）をオプショナルで受け取る
  */
-export async function updateOrderRequestStatus(id: string, status: string) {
+export async function updateOrderRequestStatus(
+  id: string, 
+  status: "納品待ち" | "却下", 
+  rejectedReason?: string
+) {
   const now = new Date().toISOString();
+  
+  // 🛠️ anyを排除し、型安全なオブジェクトとして定義
+  const updateData: OrderRequestUpdatePayload = { status };
+  
+  if (status === "納品待ち") {
+    updateData.approved_at = now;
+  } else if (status === "却下") {
+    updateData.rejected_at = now;
+    updateData.rejected_reason = rejectedReason || null;
+  }
+
   const { data, error } = await supabase
     .from("order_requests")
-    .update({
-      status: status,
-      ordered_at: status === "発注済み" ? now : null,
-    })
+    .update(updateData)
     .eq("id", id)
     .select()
     .single();
@@ -173,4 +198,37 @@ export async function deleteOrderRequest(id: string) {
   }
 
   return true;
+}
+
+/**
+ * 5. 納品確認処理 (一般ユーザー・管理者共通)
+ */
+export async function confirmDelivery(orderRequestId: string, userId?: string) {
+  try {
+    let activeUserId = userId;
+    if (!activeUserId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      activeUserId = user?.id;
+    }
+
+    if (!activeUserId) {
+      return { success: false, error: "ユーザーセッションが見つかりません。" };
+    }
+
+    const { error } = await supabase.rpc("confirm_delivery_v1", {
+      p_order_request_id: orderRequestId,
+      p_user_id: activeUserId,
+    });
+
+    if (error) {
+      console.error("納品確認RPCエラー:", error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) { // 🛠️ catch (error: any) から any を排除して安全にハンドリング
+    console.error("confirmDelivery 処理エラー:", error);
+    const errorMessage = error instanceof Error ? error.message : "予期せぬエラーが発生しました。";
+    return { success: false, error: errorMessage };
+  }
 }

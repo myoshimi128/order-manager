@@ -138,8 +138,8 @@ export default function AdminOrderRequestsPage() {
   const handleOrderComplete = async (id: string, name: string) => {
     try {
       setLoading(true);
-      await updateOrderRequestStatus(id, "発注済み");
-      alert(`【発注処理完了】\n${name} を「発注済み」に更新しました。`);
+      await updateOrderRequestStatus(id, "納品待ち");
+      alert(`【承認完了】\n${name} を「納品待ち」に更新しました。`);
       await loadRequests();
     } catch (err) {
       console.error("発注完了エラー:", err);
