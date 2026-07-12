@@ -215,31 +215,25 @@ export async function deleteOrderRequest(id: string) {
  * 5. 納品確認処理 (一般ユーザー・管理者共通)
  */
 export async function confirmDelivery(orderRequestId: string, userId?: string) {
-  try {
-    let activeUserId = userId;
-    if (!activeUserId) {
-      const { data: { user } } = await supabase.auth.getUser();
-      activeUserId = user?.id;
-    }
-
-    if (!activeUserId) {
-      return { success: false, error: "ユーザーセッションが見つかりません。" };
-    }
-
-    const { error } = await supabase.rpc("confirm_delivery_v1", {
-      p_order_request_id: orderRequestId,
-      p_user_id: activeUserId,
-    });
-
-    if (error) {
-      console.error("納品確認RPCエラー:", error.message);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true };
-  } catch (error) { // 🛠️ catch (error: any) から any を排除して安全にハンドリング
-    console.error("confirmDelivery 処理エラー:", error);
-    const errorMessage = error instanceof Error ? error.message : "予期せぬエラーが発生しました。";
-    return { success: false, error: errorMessage };
+  let activeUserId = userId;
+  if (!activeUserId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    activeUserId = user?.id;
   }
+
+  if (!activeUserId) {
+    throw new Error("ユーザーセッションが見つかりません。");
+  }
+
+  const { error } = await supabase.rpc("confirm_delivery_v1", {
+    p_order_request_id: orderRequestId,
+    p_user_id: activeUserId,
+  });
+
+  if (error) {
+    console.error("納品確認RPCエラー:", error.message);
+    throw error;
+  }
+
+  return true;
 }

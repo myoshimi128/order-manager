@@ -134,16 +134,13 @@ export default function AdminOrderRequestsPage() {
   const handleConfirmDelivery = async (id: string, name: string) => {
     try {
       setLoading(true);
-      const result = await confirmDelivery(id);
-      if (!result.success) {
-        alert(result.error || "納品確認に失敗しました。");
-        return;
-      }
+      await confirmDelivery(id);
       alert(`「${name}」の納品を確認しました。`);
       await loadRequests();
     } catch (err) {
       console.error("納品確認エラー:", err);
-      alert("納品確認処理に失敗しました。");
+      const message = err instanceof Error ? err.message : "納品確認処理に失敗しました。";
+      alert(message);
     } finally {
       setLoading(false);
     }
