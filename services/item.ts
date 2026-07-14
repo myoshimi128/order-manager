@@ -159,7 +159,7 @@ export async function recordStockMovement({
     .update({ current_stock: newStock })
     .eq("id", itemId)
     .eq("current_stock", previousStock)
-    .select()
+    .select("id")
     .maybeSingle();
 
   if (itemError) {
