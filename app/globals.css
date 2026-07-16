@@ -6,9 +6,12 @@
 @theme {
   --color-background: #f4f7fc;
   --color-foreground: #333333;
-  
+
   --color-brand-blue: #1d50a2;
   --color-brand-dark: #1e3a5f;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 /* ベーススタイルの適用

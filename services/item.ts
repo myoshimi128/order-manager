@@ -85,6 +85,7 @@ export type RecordStockMovementInput = {
   itemId: string;
   logType: "消費" | "直接入庫";
   quantityChanged: number;
+  previousStock: number;
   newStock: number;
   userId: string;
 };
@@ -147,17 +148,29 @@ export async function recordStockMovement({
   itemId,
   logType,
   quantityChanged,
+  previousStock,
   newStock,
   userId,
 }: RecordStockMovementInput) {
-  const { error: itemError } = await supabase
+  // 楽観的排他制御: 直前に読み込んだ在庫数と一致する場合のみ更新する。
+  // 一致しなければ他ユーザーが同時に更新した(ロストアップデート)ことを意味する。
+  const { data, error: itemError } = await supabase
     .from("items")
     .update({ current_stock: newStock })
-    .eq("id", itemId);
+    .eq("id", itemId)
+    .eq("current_stock", previousStock)
+    .select("id")
+    .maybeSingle();
 
   if (itemError) {
     console.error("在庫数の更新に失敗しました:", itemError);
     throw itemError;
+  }
+
+  if (!data) {
+    throw new Error(
+      "他の操作により在庫数が更新されています。画面を再読み込みしてもう一度お試しください。"
+    );
   }
 
   await createStockLog({
