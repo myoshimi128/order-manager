@@ -12,11 +12,20 @@ import {
   getItemStatus,
   ItemStatusInfo 
 } from "@/services/item";
-import { getOrderRequests, OrderRequestWithItem, ORDER_REQUEST_STATUS } from "@/services/orderRequests";
+import {
+  getOrderRequests,
+  confirmDelivery,
+  OrderRequestWithItem,
+  ORDER_REQUEST_STATUS,
+} from "@/services/orderRequests";
 
 export default function SupplyDashboard() {
   const [items, setItems] = useState<Item[]>([]);
   const [requestedItemIds, setRequestedItemIds] = useState<Set<string>>(new Set());
+  const [myDeliveryPendingRequests, setMyDeliveryPendingRequests] = useState<
+    OrderRequestWithItem[]
+  >([]);
+  const [confirmingRequestId, setConfirmingRequestId] = useState<string | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
 
@@ -128,28 +137,47 @@ export default function SupplyDashboard() {
     }
   };
 
-  // 画面表示時に Supabase から備品一覧および発注リクエスト一覧を取得
+  // 取得済みのリクエスト一覧から画面表示用の状態を組み立てる共通処理
+  const applyRequestsData = (
+    allRequests: OrderRequestWithItem[],
+    userId: string | null
+  ) => {
+    // 未完了（承認待ち / 納品待ち）のリクエストがある item_id を抽出
+    const activeItemIds = new Set<string>(
+      allRequests
+        .filter(
+          (req) =>
+            req.status === ORDER_REQUEST_STATUS.PENDING ||
+            req.status === ORDER_REQUEST_STATUS.APPROVED
+        )
+        .map((req) => req.item_id)
+    );
+    setRequestedItemIds(activeItemIds);
+
+    // 自分が申請し、現在「納品待ち」になっているリクエストを抽出
+    setMyDeliveryPendingRequests(
+      allRequests.filter(
+        (req) =>
+          req.status === ORDER_REQUEST_STATUS.APPROVED &&
+          req.requested_by_user_id === userId
+      )
+    );
+  };
+
+  // 画面表示時に Supabase から備品一覧・発注リクエスト一覧・ログインユーザーを取得
   useEffect(() => {
     async function fetchData() {
       try {
-        const [itemsData, requestsData] = await Promise.all([
+        const [itemsData, requestsData, { data: authData }] = await Promise.all([
           getItems(),
           getOrderRequests(),
+          getCurrentUser(),
         ]);
 
         setItems(itemsData);
 
-        // 未完了（承認待ち / 納品待ち）のリクエストがある item_id を抽出
-        const activeItemIds = new Set<string>(
-          (requestsData as OrderRequestWithItem[])
-            .filter(
-              (req: OrderRequestWithItem) =>
-                req.status === ORDER_REQUEST_STATUS.PENDING ||
-                req.status === ORDER_REQUEST_STATUS.APPROVED
-            )
-            .map((req: OrderRequestWithItem) => req.item_id)
-        );
-        setRequestedItemIds(activeItemIds);
+        const userId = authData.user?.id ?? null;
+        applyRequestsData(requestsData as OrderRequestWithItem[], userId);
       } catch (error) {
         console.error("データ取得エラー:", error);
       }
@@ -157,6 +185,34 @@ export default function SupplyDashboard() {
 
     fetchData();
   }, []);
+
+  // --- 納品完了の確定処理（自分がリクエストした備品を受け取った場合） ---
+  const handleConfirmDelivery = async (requestId: string, itemName: string) => {
+    setConfirmingRequestId(requestId);
+
+    try {
+      await confirmDelivery(requestId);
+      alert(`「${itemName}」の納品を確認しました。`);
+
+      const [itemsData, requestsData, { data: authData }] = await Promise.all([
+        getItems(),
+        getOrderRequests(),
+        getCurrentUser(),
+      ]);
+      setItems(itemsData);
+      applyRequestsData(
+        requestsData as OrderRequestWithItem[],
+        authData.user?.id ?? null
+      );
+    } catch (error) {
+      console.error("納品確認エラー:", error);
+      const message =
+        error instanceof Error ? error.message : "納品確認処理に失敗しました。";
+      alert(message);
+    } finally {
+      setConfirmingRequestId(null);
+    }
+  };
 
   // 検索・フィルター・ソートを適用する処理
   const processedItems = useMemo(() => {
@@ -214,6 +270,53 @@ export default function SupplyDashboard() {
           </div>
         </div>
       </div>
+
+      {/* 自分がリクエストした納品待ち備品エリア */}
+      {myDeliveryPendingRequests.length > 0 && (
+        <div className="bg-blue-50/60 rounded-2xl p-5 border border-blue-100 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-800">
+              📦 あなたが申請した納品待ちの備品
+            </h2>
+            <span className="text-xs font-bold text-blue-600">
+              {myDeliveryPendingRequests.length} 件
+            </span>
+          </div>
+          <div className="space-y-2">
+            {myDeliveryPendingRequests.map((req) => (
+              <div
+                key={req.id}
+                className="bg-white rounded-xl border border-blue-100/80 px-4 py-3 flex items-center justify-between gap-4"
+              >
+                <div>
+                  <div className="text-sm font-bold text-slate-800">
+                    {req.items?.name ?? "不明な備品"}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    希望数量: {req.request_quantity} {req.items?.unit ?? "個"}
+                    {req.approved_at && (
+                      <>
+                        {" "}
+                        ／ 承認日時: {new Date(req.approved_at).toLocaleString("ja-JP")}
+                      </>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleConfirmDelivery(req.id, req.items?.name ?? "不明な備品")
+                  }
+                  disabled={confirmingRequestId === req.id}
+                  className="bg-brand-dark hover:bg-brand-blue text-white text-xs font-bold py-2 px-3 rounded-md transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                >
+                  {confirmingRequestId === req.id ? "処理中..." : "✅ 納品完了"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 上部サマリーカード */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
