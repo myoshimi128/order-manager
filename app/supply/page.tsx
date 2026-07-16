@@ -79,7 +79,12 @@ export default function SupplyDashboard() {
       alert(message);
       // 在庫が他の操作で変わっている可能性があるため最新状態を再取得する
       try {
-        setItems(await getItems());
+        const latestItems = await getItems();
+        setItems(latestItems);
+        // 出入庫モーダルが開いている場合は表示中の在庫数も最新に合わせる
+        setStockItem((prev) =>
+          prev ? latestItems.find((i) => i.id === prev.id) ?? prev : prev
+        );
       } catch (refetchError) {
         console.error("在庫再取得エラー:", refetchError);
       }
