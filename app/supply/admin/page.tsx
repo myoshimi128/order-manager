@@ -165,12 +165,17 @@ export default function AdminOrderRequestsPage() {
     }
   };
 
-  // 未処理と処理済みに分類
+  // 承認待ち／納品待ち／履歴（納品済み・却下）に分類
   const activeRequests = requests.filter(
     (req) => req.status === ORDER_REQUEST_STATUS.PENDING
   );
-  const completedRequests = requests.filter(
-    (req) => req.status !== ORDER_REQUEST_STATUS.PENDING
+  const deliveryPendingRequests = requests.filter(
+    (req) => req.status === ORDER_REQUEST_STATUS.APPROVED
+  );
+  const historyRequests = requests.filter(
+    (req) =>
+      req.status === ORDER_REQUEST_STATUS.DELIVERED ||
+      req.status === ORDER_REQUEST_STATUS.REJECTED
   );
 
   return (
@@ -335,11 +340,73 @@ export default function AdminOrderRequestsPage() {
           )}
         </div>
 
+        {/* 納品待ちエリア */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 bg-emerald-50/50 flex justify-between items-center">
+            <span className="text-sm font-bold text-slate-800">
+              📦 納品待ちの備品
+            </span>
+            <span className="text-xs font-bold text-slate-500">
+              納品待ち: {deliveryPendingRequests.length} 件
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="p-12 text-center text-xs text-slate-400 font-medium">
+              データを読み込み中...
+            </div>
+          ) : deliveryPendingRequests.length === 0 ? (
+            <div className="p-12 text-center space-y-2">
+              <div className="text-2xl">📭</div>
+              <div className="text-xs font-bold text-slate-400">
+                現在、納品待ちの備品はありません。
+              </div>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {deliveryPendingRequests.map((req) => (
+                <div
+                  key={req.id}
+                  className="p-5 hover:bg-slate-50/50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
+                        {req.id.slice(0, 8)}...
+                      </span>
+                      {req.approved_at && (
+                        <span className="text-xs text-slate-400 font-medium">
+                          承認日時: {req.approved_at}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm font-bold text-slate-800 mt-1">
+                      {req.name}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      発注数量: {req.quantity} {req.unit} ／ 保管場所: {req.location}
+                    </div>
+                  </div>
+                  <div className="w-full md:w-40 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmDelivery(req.id, req.name)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2.5 rounded-md flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-sm"
+                    >
+                      📦 納品完了にする
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* 履歴エリア */}
-        {completedRequests.length > 0 && (
+        {historyRequests.length > 0 && (
           <div className="pt-6 border-t border-slate-200">
             <h2 className="text-xs font-bold text-slate-400 tracking-wider uppercase mb-3">
-              ✅ 処理済みのタスク（履歴: {completedRequests.length}件）
+              ✅ 処理済みのタスク（履歴: {historyRequests.length}件）
             </h2>
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
               <table className="w-full text-left border-collapse text-xs">
@@ -348,12 +415,11 @@ export default function AdminOrderRequestsPage() {
                     <th className="p-4">ID / 備品名</th>
                     <th className="p-4">発注数量</th>
                     <th className="p-4">状態</th>
-                    <th className="p-4">承認完了時刻</th>
-                    <th className="p-4 text-right">アクション</th>
+                    <th className="p-4 text-right">承認完了時刻</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-600 font-medium">
-                  {completedRequests.map((req) => (
+                  {historyRequests.map((req) => (
                     <tr key={req.id} className="bg-slate-50/30">
                       <td className="p-4">
                         <span className="font-mono text-slate-400 mr-2">
@@ -371,19 +437,8 @@ export default function AdminOrderRequestsPage() {
                           {req.status}
                         </span>
                       </td>
-                      <td className="p-4 font-mono text-slate-400">
+                      <td className="p-4 text-right font-mono text-slate-400">
                         {req.approved_at ?? "-"}
-                      </td>
-                      <td className="p-4 text-right">
-                        {req.status === ORDER_REQUEST_STATUS.APPROVED && (
-                          <button
-                            type="button"
-                            onClick={() => handleConfirmDelivery(req.id, req.name)}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] py-1.5 px-3 rounded-md transition-colors cursor-pointer"
-                          >
-                            📦 納品確認
-                          </button>
-                        )}
                       </td>
                     </tr>
                   ))}

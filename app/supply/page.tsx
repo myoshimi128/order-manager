@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { Layout } from "@/components/Layout"; 
+import { Layout } from "@/components/Layout";
 import { Button } from "@/components/Button";
-import { getCurrentUser } from "@/services/auth";
+import { getCurrentUser, getCurrentAppUser } from "@/services/auth";
+import { type User } from "@/services/users";
 import { StockModal, Item } from "@/components/StockModal";
 import { 
   getItems, 
@@ -26,6 +27,7 @@ export default function SupplyDashboard() {
     OrderRequestWithItem[]
   >([]);
   const [confirmingRequestId, setConfirmingRequestId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<User["role"] | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
 
@@ -168,13 +170,16 @@ export default function SupplyDashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [itemsData, requestsData, { data: authData }] = await Promise.all([
-          getItems(),
-          getOrderRequests(),
-          getCurrentUser(),
-        ]);
+        const [itemsData, requestsData, { data: authData }, appUser] =
+          await Promise.all([
+            getItems(),
+            getOrderRequests(),
+            getCurrentUser(),
+            getCurrentAppUser(),
+          ]);
 
         setItems(itemsData);
+        setUserRole(appUser?.role ?? null);
 
         const userId = authData.user?.id ?? null;
         applyRequestsData(requestsData as OrderRequestWithItem[], userId);
@@ -263,6 +268,16 @@ export default function SupplyDashboard() {
           <p className="text-xs font-mono text-slate-500 tracking-widest uppercase mt-0.5">STOCK MANAGEMENT</p>
         </div>
         <div className="flex gap-2">
+          {userRole === "役職" && (
+            <div className="w-44">
+              <Button
+                href="/supply/admin"
+                className="bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm py-2 border border-slate-300"
+              >
+                🗂️ 役職･管理者専用画面へ
+              </Button>
+            </div>
+          )}
           <div className="w-44">
             <Button href="/supply/requests" className="bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm py-2 border border-slate-300">
               📝 発注リクエストを作成
