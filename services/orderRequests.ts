@@ -164,7 +164,7 @@ export async function getOrderRequests() {
  */
 export async function updateOrderRequestStatus(
   id: string,
-  status: typeof ORDER_REQUEST_STATUS.APPROVED | typeof ORDER_REQUEST_STATUS.REJECTED,
+  status: OrderRequestUpdatePayload["status"],
   rejectedReason?: string
 ) {
   const now = new Date().toISOString();
