@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/Button";
 import { AddItemModal } from "@/components/AddItemModal";
+import { RejectReasonModal } from "@/components/RejectReasonModal";
 import { getCurrentAppUser } from "@/services/auth";
 import {
   getOrderRequests,
   updateOrderRequestStatus,
-  deleteOrderRequest,
   confirmDelivery,
   ORDER_REQUEST_STATUS,
 } from "@/services/orderRequests";
@@ -29,6 +29,7 @@ type OrderRequestResponse = {
     unit: string;
     location: string;
     purchase_url: string | null;
+    current_stock: number;
   } | null;
 };
 
@@ -40,6 +41,7 @@ type RequestUIItem = {
   quantity: number;
   unit: string;
   location: string;
+  currentStock: number;
   requester: string;
   comment: string;
   date: string;
@@ -53,6 +55,8 @@ export default function AdminOrderRequestsPage() {
   const [requests, setRequests] = useState<RequestUIItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState<{ id: string; name: string } | null>(null);
+  const [isRejecting, setIsRejecting] = useState(false);
 
   // データ取得・整形を行う共通処理
   const loadRequests = async () => {
@@ -70,6 +74,7 @@ export default function AdminOrderRequestsPage() {
           quantity: item.request_quantity || 0,
           unit: itemDetail?.unit || "個",
           location: itemDetail?.location || "保管場所未設定",
+          currentStock: itemDetail?.current_stock ?? 0,
           requester: "現場スタッフ",
           comment: item.comment || "なし",
           date: item.created_at
@@ -146,22 +151,21 @@ export default function AdminOrderRequestsPage() {
     }
   };
 
-  // 【削除】Supabaseからデータを削除
-  const handleDelete = async (id: string, name: string) => {
-    const confirmDelete = window.confirm(
-      `【リクエストの削除確認】\n${name} のリクエストを完全に削除しますか？`
-    );
-    if (confirmDelete) {
-      try {
-        setLoading(true);
-        await deleteOrderRequest(id);
-        alert(`「${name}」のリクエストを削除しました。`);
-        await loadRequests();
-      } catch (err) {
-        console.error("削除エラー:", err);
-        alert("リクエストの削除に失敗しました。");
-        setLoading(false);
-      }
+  // 【却下】理由を添えてステータスを「却下」に更新
+  const handleReject = async (reason: string) => {
+    if (!rejectTarget) return;
+
+    setIsRejecting(true);
+    try {
+      await updateOrderRequestStatus(rejectTarget.id, ORDER_REQUEST_STATUS.REJECTED, reason);
+      alert(`「${rejectTarget.name}」のリクエストを却下しました。`);
+      setRejectTarget(null);
+      await loadRequests();
+    } catch (err) {
+      console.error("却下エラー:", err);
+      alert("却下処理に失敗しました。");
+    } finally {
+      setIsRejecting(false);
     }
   };
 
@@ -251,9 +255,6 @@ export default function AdminOrderRequestsPage() {
                   {/* 左側：リクエストの主要情報 */}
                   <div className="space-y-3 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
-                        {req.id.slice(0, 8)}...
-                      </span>
                       <span className="text-xs text-slate-400 font-medium">
                         申請日: {req.date}
                       </span>
@@ -271,17 +272,30 @@ export default function AdminOrderRequestsPage() {
                       </p>
                     </div>
 
-                    {/* 数量 */}
-                    <div className="inline-flex items-baseline gap-1 bg-slate-50 border border-slate-200/60 rounded-lg px-3 py-1.5">
-                      <span className="text-xs text-slate-500 font-medium">
-                        希望発注数:
-                      </span>
-                      <span className="text-lg font-black text-slate-800 ml-1">
-                        {req.quantity}
-                      </span>
-                      <span className="text-xs font-bold text-slate-500">
-                        {req.unit}
-                      </span>
+                    {/* 数量・現在庫数 */}
+                    <div className="flex flex-wrap gap-2">
+                      <div className="inline-flex items-baseline gap-1 bg-slate-50 border border-slate-200/60 rounded-lg px-3 py-1.5">
+                        <span className="text-xs text-slate-500 font-medium">
+                          希望発注数:
+                        </span>
+                        <span className="text-lg font-black text-slate-800 ml-1">
+                          {req.quantity}
+                        </span>
+                        <span className="text-xs font-bold text-slate-500">
+                          {req.unit}
+                        </span>
+                      </div>
+                      <div className="inline-flex items-baseline gap-1 bg-slate-50 border border-slate-200/60 rounded-lg px-3 py-1.5">
+                        <span className="text-xs text-slate-500 font-medium">
+                          現在庫数:
+                        </span>
+                        <span className="text-lg font-black text-slate-800 ml-1">
+                          {req.currentStock}
+                        </span>
+                        <span className="text-xs font-bold text-slate-500">
+                          {req.unit}
+                        </span>
+                      </div>
                     </div>
 
                     {/* 現場からのコメント */}
@@ -324,13 +338,13 @@ export default function AdminOrderRequestsPage() {
                       </button>
                     </div>
 
-                    {/* 削除ボタン */}
+                    {/* 却下ボタン */}
                     <div className="w-full md:w-32">
                       <Button
-                        onClick={() => handleDelete(req.id, req.name)}
+                        onClick={() => setRejectTarget({ id: req.id, name: req.name })}
                         className="border border-slate-200 bg-white text-slate-500 font-bold text-xs py-2.5 hover:bg-red-50 hover:text-red-600"
                       >
-                        🗑️ 削除
+                        ✕ 却下
                       </Button>
                     </div>
                   </div>
@@ -457,6 +471,16 @@ export default function AdminOrderRequestsPage() {
           loadRequests();
         }}
       />
+
+      {/* 却下理由入力モーダル */}
+      {rejectTarget && (
+        <RejectReasonModal
+          itemName={rejectTarget.name}
+          isSubmitting={isRejecting}
+          onClose={() => setRejectTarget(null)}
+          onSubmit={handleReject}
+        />
+      )}
     </Layout>
   );
 }
