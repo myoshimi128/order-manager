@@ -27,8 +27,15 @@ export function RejectReasonModal({
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4 relative">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reject-reason-title"
+        className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4 relative"
+      >
         <button
+          type="button"
+          aria-label="閉じる"
           onClick={onClose}
           disabled={isSubmitting}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg cursor-pointer disabled:opacity-50"
@@ -37,7 +44,7 @@ export function RejectReasonModal({
         </button>
 
         <div>
-          <h3 className="text-base font-bold text-slate-800">リクエストを却下</h3>
+          <h3 id="reject-reason-title" className="text-base font-bold text-slate-800">リクエストを却下</h3>
           <p className="text-xs text-slate-500 mt-1">
             対象: <span className="font-bold text-slate-700">{itemName}</span>
           </p>

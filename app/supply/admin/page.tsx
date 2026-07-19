@@ -155,9 +155,19 @@ export default function AdminOrderRequestsPage() {
   const handleReject = async (reason: string) => {
     if (!rejectTarget) return;
 
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) {
+      alert("却下理由を入力してください。");
+      return;
+    }
+
     setIsRejecting(true);
     try {
-      await updateOrderRequestStatus(rejectTarget.id, ORDER_REQUEST_STATUS.REJECTED, reason);
+      await updateOrderRequestStatus(
+        rejectTarget.id,
+        ORDER_REQUEST_STATUS.REJECTED,
+        trimmedReason
+      );
       alert(`「${rejectTarget.name}」のリクエストを却下しました。`);
       setRejectTarget(null);
       await loadRequests();
