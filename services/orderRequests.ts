@@ -199,16 +199,36 @@ export async function updateOrderRequestStatus(
 /**
  * 4. 却下通知の確認処理 (一般ユーザー用)
  * - 申請者が却下内容を確認したことを記録し、/supply の却下表示を消す
+ * - RLSが無い環境でも他人のリクエストを操作できないよう、
+ *   本人の申請かつステータスが「却下」の場合のみ更新する
  */
-export async function acknowledgeRejection(id: string) {
-  const { error } = await supabase
+export async function acknowledgeRejection(id: string, userId?: string) {
+  let activeUserId = userId;
+  if (!activeUserId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    activeUserId = user?.id;
+  }
+
+  if (!activeUserId) {
+    throw new Error("ユーザーセッションが見つかりません。");
+  }
+
+  const { data, error } = await supabase
     .from("order_requests")
     .update({ rejection_acknowledged_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("requested_by_user_id", activeUserId)
+    .eq("status", ORDER_REQUEST_STATUS.REJECTED)
+    .select()
+    .maybeSingle();
 
   if (error) {
     console.error("却下確認の記録に失敗しました:", error);
     throw error;
+  }
+
+  if (!data) {
+    throw new Error("対象のリクエストが見つからないか、確認する権限がありません。");
   }
 
   return true;
