@@ -61,6 +61,7 @@ Supabase Authと連携し、現場/役員の画面切り替えの権限根拠と
 - **approved_at** (timestamp): **役員承認（発注）日時（ボタン押下時に自動記録）** ※旧 `ordered_at` から名称変更または移行
 - **rejected_at** (timestamp): **役員却下日時（ボタン押下時に自動記録）**
 - **rejected_reason** (text): **役員による却下理由**
+- **rejection_acknowledged_at** (timestamp): **申請者が却下内容を確認した日時（「確認しました」ボタン押下時に自動記録。/supply 画面の却下通知表示を消すために使用）**
 - **delivered_at** (timestamp): 納品(検収)日時（ボタン押下時に自動記録）
 - **delivered_by** (uuid, FK): **納品確認者ID。`users(id)` を参照（一般ユーザーまたは役員のIDを記録）**
 - **comment** (text): 補足コメント（任意）
@@ -94,7 +95,8 @@ app/
     - `承認待ち`: 状態テキストのみ表示。
     - `納品待ち`: **[納品しました]** ボタンを表示。押下時に納品確認ロジックを実行。
     - `納品済み`: 状態テキストに加え、補足情報として「誰が納品確認したか（`delivered_by`）」を表示。
-    - `却下`: 状態テキストを表示。必要に応じて詳細モーダル等で `rejected_reason`（却下理由）を確認可能にする。
+    - `却下`: `rejected_reason`（却下理由）付きで表示し、**[確認しました]** ボタンを表示。押下時に `rejection_acknowledged_at` を記録し、以後この表示を消す。
+      - ※現状は専用画面（`requests/list/page.tsx`）ではなく、現場ダッシュボード（`app/supply/page.tsx`）内の「却下されたリクエスト」エリアとして実装している。
 
 #### 画面4: 役員専用・ワンクリック発注画面 (`app/supply/admin/page.tsx`)
 
@@ -232,6 +234,7 @@ DEFAULT now() | リクエストが送信された日時（自動記録） |
 | approved_at | 承認日時 | timestamp | - | 役員が「承認」を押した日時（＝発注完了日時） |
 | rejected_at | 却下日時 | timestamp | - | 役員が「却下」を押した日時 |
 | rejected_reason | 却下理由 | text | - | 役員が却下時に入力した理由テキスト |
+| rejection_acknowledged_at | 却下確認日時 | timestamp | - | 申請者が却下内容を確認した日時（/supply 画面の却下通知表示を消す判定に使用） |
 | delivered_at | 納品完了日時 | timestamp | - | 一般ユーザーまたは管理者が「納品確認」を押した日時 |
 | delivered_by | 納品確認者ID | uuid | FOREIGN KEY users(id) | 最初に「納品確認」ボタンを押した人のユーザーID |
 

@@ -29,6 +29,7 @@ export type OrderRequestWithItem = {
   approved_at?: string | null;  // 旧 ordered_at から変更
   rejected_at?: string | null;  // 追加
   rejected_reason?: string | null;
+  rejection_acknowledged_at?: string | null; // 却下確認済み日時
   delivered_at?: string | null;
   delivered_by?: string | null; // 追加
   items?: {
@@ -38,6 +39,7 @@ export type OrderRequestWithItem = {
     unit: string;
     location: string;
     purchase_url?: string | null;
+    current_stock: number;
   } | null;
 };
 
@@ -138,7 +140,7 @@ export async function getOrderRequests() {
 
     const { data: items, error: itemError } = await supabase
       .from("items")
-      .select("id, name, catalog_no, unit, location, purchase_url")
+      .select("id, name, catalog_no, unit, location, purchase_url, current_stock")
       .in("id", itemIds);
 
     if (itemError) {
@@ -195,17 +197,38 @@ export async function updateOrderRequestStatus(
 }
 
 /**
- * 4. リクエストを削除する処理 (管理者用)
+ * 4. 却下通知の確認処理 (一般ユーザー用)
+ * - 申請者が却下内容を確認したことを記録し、/supply の却下表示を消す
+ * - RLSが無い環境でも他人のリクエストを操作できないよう、
+ *   本人の申請かつステータスが「却下」の場合のみ更新する
  */
-export async function deleteOrderRequest(id: string) {
-  const { error } = await supabase
+export async function acknowledgeRejection(id: string, userId?: string) {
+  let activeUserId = userId;
+  if (!activeUserId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    activeUserId = user?.id;
+  }
+
+  if (!activeUserId) {
+    throw new Error("ユーザーセッションが見つかりません。");
+  }
+
+  const { data, error } = await supabase
     .from("order_requests")
-    .delete()
-    .eq("id", id);
+    .update({ rejection_acknowledged_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("requested_by_user_id", activeUserId)
+    .eq("status", ORDER_REQUEST_STATUS.REJECTED)
+    .select()
+    .maybeSingle();
 
   if (error) {
-    console.error("リクエストの削除に失敗しました:", error);
+    console.error("却下確認の記録に失敗しました:", error);
     throw error;
+  }
+
+  if (!data) {
+    throw new Error("対象のリクエストが見つからないか、確認する権限がありません。");
   }
 
   return true;
