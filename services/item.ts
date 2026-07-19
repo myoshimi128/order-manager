@@ -18,7 +18,16 @@ export function getItemStatus(
   thresholdStock: number,
   hasActiveRequest: boolean = false
 ): ItemStatusInfo {
-  // 1. 在庫切れ
+  // 1. 基準数以下（在庫切れ含む）で、既にリクエスト中の場合は最優先で「リクエスト中」にする
+  if (currentStock <= thresholdStock && hasActiveRequest) {
+    return {
+      status: "requested",
+      label: "リクエスト中",
+      color: "blue",
+    };
+  }
+
+  // 2. 在庫切れ
   if (currentStock <= 0) {
     return {
       status: "out_of_stock",
@@ -27,15 +36,8 @@ export function getItemStatus(
     };
   }
 
-  // 2. 基準数以下の場合の分岐
+  // 3. 基準数以下（要補充）
   if (currentStock <= thresholdStock) {
-    if (hasActiveRequest) {
-      return {
-        status: "requested",
-        label: "リクエスト中",
-        color: "blue",
-      };
-    }
     return {
       status: "low_stock",
       label: "要補充",
@@ -43,7 +45,7 @@ export function getItemStatus(
     };
   }
 
-  // 3. 在庫十分
+  // 4. 在庫十分
   return {
     status: "in_stock",
     label: "在庫あり",

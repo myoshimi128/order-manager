@@ -16,6 +16,7 @@ import {
 import {
   getOrderRequests,
   confirmDelivery,
+  acknowledgeRejection,
   OrderRequestWithItem,
   ORDER_REQUEST_STATUS,
 } from "@/services/orderRequests";
@@ -26,7 +27,11 @@ export default function SupplyDashboard() {
   const [myDeliveryPendingRequests, setMyDeliveryPendingRequests] = useState<
     OrderRequestWithItem[]
   >([]);
+  const [myRejectedRequests, setMyRejectedRequests] = useState<
+    OrderRequestWithItem[]
+  >([]);
   const [confirmingRequestId, setConfirmingRequestId] = useState<string | null>(null);
+  const [acknowledgingRequestId, setAcknowledgingRequestId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<User["role"] | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
@@ -164,6 +169,16 @@ export default function SupplyDashboard() {
           req.requested_by_user_id === userId
       )
     );
+
+    // 自分が申請し、却下されてまだ確認していないリクエストを抽出
+    setMyRejectedRequests(
+      allRequests.filter(
+        (req) =>
+          req.status === ORDER_REQUEST_STATUS.REJECTED &&
+          req.requested_by_user_id === userId &&
+          !req.rejection_acknowledged_at
+      )
+    );
   };
 
   // 画面表示時に Supabase から備品一覧・発注リクエスト一覧・ログインユーザーを取得
@@ -216,6 +231,31 @@ export default function SupplyDashboard() {
       alert(message);
     } finally {
       setConfirmingRequestId(null);
+    }
+  };
+
+  // --- 却下通知の確認処理（申請者が却下内容を確認した場合） ---
+  const handleAcknowledgeRejection = async (requestId: string) => {
+    setAcknowledgingRequestId(requestId);
+
+    try {
+      await acknowledgeRejection(requestId);
+
+      const [requestsData, { data: authData }] = await Promise.all([
+        getOrderRequests(),
+        getCurrentUser(),
+      ]);
+      applyRequestsData(
+        requestsData as OrderRequestWithItem[],
+        authData.user?.id ?? null
+      );
+    } catch (error) {
+      console.error("却下確認エラー:", error);
+      const message =
+        error instanceof Error ? error.message : "確認処理に失敗しました。";
+      alert(message);
+    } finally {
+      setAcknowledgingRequestId(null);
     }
   };
 
@@ -326,6 +366,50 @@ export default function SupplyDashboard() {
                   className="bg-brand-dark hover:bg-brand-blue text-white text-xs font-bold py-2 px-3 rounded-md transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                 >
                   {confirmingRequestId === req.id ? "処理中..." : "✅ 納品完了"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 却下されたリクエストエリア */}
+      {myRejectedRequests.length > 0 && (
+        <div className="bg-red-50/60 rounded-2xl p-5 border border-red-100 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-800">
+              ❌ 却下されたリクエスト
+            </h2>
+            <span className="text-xs font-bold text-red-600">
+              {myRejectedRequests.length} 件
+            </span>
+          </div>
+          <div className="space-y-2">
+            {myRejectedRequests.map((req) => (
+              <div
+                key={req.id}
+                className="bg-white rounded-xl border border-red-100/80 px-4 py-3 flex items-center justify-between gap-4"
+              >
+                <div>
+                  <div className="text-sm font-bold text-slate-800">
+                    {req.items?.name ?? "不明な備品"}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    希望数量: {req.request_quantity} {req.items?.unit ?? "個"}
+                  </div>
+                  {req.rejected_reason && (
+                    <div className="text-xs text-red-600 mt-1">
+                      却下理由: 「{req.rejected_reason}」
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAcknowledgeRejection(req.id)}
+                  disabled={acknowledgingRequestId === req.id}
+                  className="border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold py-2 px-3 rounded-md transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                >
+                  {acknowledgingRequestId === req.id ? "処理中..." : "確認しました"}
                 </button>
               </div>
             ))}
