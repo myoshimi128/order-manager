@@ -16,11 +16,18 @@ export type Item = {
 type StockModalProps = {
   item: Item;
   isSaving?: boolean; // 保存中の連打防止フラグ
+  allowStockIn?: boolean; // false の場合は「直接入庫」モードを使わせない（消費のみ）
   onClose: () => void;
   onSave: (itemId: string, mode: "消費" | "直接入庫", quantity: number) => void;
 };
 
-export function StockModal({ item, isSaving = false, onClose, onSave }: StockModalProps) {
+export function StockModal({
+  item,
+  isSaving = false,
+  allowStockIn = true,
+  onClose,
+  onSave,
+}: StockModalProps) {
   const [stockMode, setStockMode] = useState<"消費" | "直接入庫">("消費");
   const [quantity, setQuantity] = useState<number>(1);
 
@@ -52,27 +59,35 @@ export function StockModal({ item, isSaving = false, onClose, onSave }: StockMod
           </p>
         </div>
 
-        {/* モード切り替え */}
-        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => setStockMode("消費")}
-            className={`py-2 rounded-lg transition-all cursor-pointer ${
-              stockMode === "消費" ? "bg-white text-red-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            🔴 消費 (減らす)
-          </button>
-          <button
-            type="button"
-            onClick={() => setStockMode("直接入庫")}
-            className={`py-2 rounded-lg transition-all cursor-pointer ${
-              stockMode === "直接入庫" ? "bg-white text-emerald-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            🟢 直接入庫 (増やす)
-          </button>
-        </div>
+        {/* モード切り替え（消費のみ許可の場合はトグル自体を表示しない） */}
+        {allowStockIn ? (
+          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setStockMode("消費")}
+              className={`py-2 rounded-lg transition-all cursor-pointer ${
+                stockMode === "消費" ? "bg-white text-red-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              🔴 消費 (減らす)
+            </button>
+            <button
+              type="button"
+              onClick={() => setStockMode("直接入庫")}
+              className={`py-2 rounded-lg transition-all cursor-pointer ${
+                stockMode === "直接入庫" ? "bg-white text-emerald-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              🟢 直接入庫 (増やす)
+            </button>
+          </div>
+        ) : (
+          <div className="bg-slate-100 p-1 rounded-xl text-xs font-bold">
+            <div className="py-2 rounded-lg bg-white text-red-600 shadow-xs text-center">
+              🔴 消費 (減らす)
+            </div>
+          </div>
+        )}
 
         {/* 数量入力 */}
         <div className="space-y-1.5 text-xs">
