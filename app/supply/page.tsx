@@ -188,7 +188,7 @@ export default function SupplyDashboard() {
         const [itemsData, requestsData, { data: authData }, appUser] =
           await Promise.all([
             getItems(),
-            getOrderRequests(),
+            getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED]),
             getCurrentUser(),
             getCurrentAppUser(),
           ]);
@@ -216,7 +216,7 @@ export default function SupplyDashboard() {
 
       const [itemsData, requestsData, { data: authData }] = await Promise.all([
         getItems(),
-        getOrderRequests(),
+        getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED]),
         getCurrentUser(),
       ]);
       setItems(itemsData);
@@ -242,7 +242,7 @@ export default function SupplyDashboard() {
       await acknowledgeRejection(requestId);
 
       const [requestsData, { data: authData }] = await Promise.all([
-        getOrderRequests(),
+        getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED]),
         getCurrentUser(),
       ]);
       applyRequestsData(
