@@ -65,6 +65,14 @@ export type OrderRequestUIItem = {
   deliveredAtLabel: string | null;
 };
 
+// href に渡しても安全な http/https のURLのみ許可し、それ以外（javascript: など）は無効化する
+function sanitizePurchaseUrl(url?: string | null): string {
+  if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+    return url;
+  }
+  return "#";
+}
+
 // 管理画面の承認待ち一覧・過去歴ページの両方から使う共通の整形処理
 export function formatOrderRequestForAdminUI(
   req: OrderRequestWithItem
@@ -84,7 +92,7 @@ export function formatOrderRequestForAdminUI(
       ? new Date(req.created_at).toLocaleDateString("ja-JP")
       : "-",
     status: req.status || ORDER_REQUEST_STATUS.PENDING,
-    purchase_url: itemDetail?.purchase_url || "#",
+    purchase_url: sanitizePurchaseUrl(itemDetail?.purchase_url),
     approved_at: req.approved_at
       ? new Date(req.approved_at).toLocaleString("ja-JP")
       : null,
