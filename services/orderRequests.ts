@@ -41,6 +41,11 @@ export type OrderRequestWithItem = {
     purchase_url?: string | null;
     current_stock: number;
   } | null;
+  requester?: {
+    id: string;
+    name: string;
+    user_no: string;
+  } | null;
 };
 
 // 管理画面（承認待ち一覧・過去歴）向けに整形した表示用の型
@@ -86,7 +91,7 @@ export function formatOrderRequestForAdminUI(
     unit: itemDetail?.unit || "個",
     location: itemDetail?.location || "保管場所未設定",
     currentStock: itemDetail?.current_stock ?? 0,
-    requester: "現場スタッフ",
+    requester: req.requester?.name || "不明なユーザー",
     comment: req.comment || "なし",
     date: req.created_at
       ? new Date(req.created_at).toLocaleDateString("ja-JP")
@@ -207,25 +212,41 @@ export async function getOrderRequests(statuses?: OrderRequestStatus[]) {
     // 2) 関連する item_id を抽出して items テーブルを一括取得
     const itemIds = Array.from(new Set(requests.map((r) => r.item_id).filter(Boolean)));
 
-    if (itemIds.length === 0) {
-      return requests.map((req) => ({ ...req, items: null }));
-    }
-
-    const { data: items, error: itemError } = await supabase
-      .from("items")
-      .select("id, name, catalog_no, unit, location, purchase_url, current_stock")
-      .in("id", itemIds);
+    const { data: items, error: itemError } = itemIds.length > 0
+      ? await supabase
+          .from("items")
+          .select("id, name, catalog_no, unit, location, purchase_url, current_stock")
+          .in("id", itemIds)
+      : { data: [], error: null };
 
     if (itemError) {
       console.warn("備品情報の取得に失敗しました（リクエストデータのみ返却します）:", itemError);
     }
 
-    // 3) Map を使って高速マッピング・データ結合
+    // 3) 関連する requested_by_user_id を抽出して users テーブルを一括取得（送信者名の表示用）
+    const requesterIds = Array.from(
+      new Set(requests.map((r) => r.requested_by_user_id).filter(Boolean))
+    );
+
+    const { data: requesters, error: requesterError } = requesterIds.length > 0
+      ? await supabase
+          .from("users")
+          .select("id, name, user_no")
+          .in("id", requesterIds)
+      : { data: [], error: null };
+
+    if (requesterError) {
+      console.warn("送信者情報の取得に失敗しました（リクエストデータのみ返却します）:", requesterError);
+    }
+
+    // 4) Map を使って高速マッピング・データ結合
     const itemsMap = new Map((items || []).map((item) => [item.id, item]));
+    const requestersMap = new Map((requesters || []).map((user) => [user.id, user]));
 
     return requests.map((req) => ({
       ...req,
       items: itemsMap.get(req.item_id) || null,
+      requester: requestersMap.get(req.requested_by_user_id) || null,
     })) as OrderRequestWithItem[];
   } catch (error) {
     console.error("getOrderRequests エラー:", error);
