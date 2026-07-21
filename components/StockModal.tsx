@@ -31,12 +31,16 @@ export function StockModal({
   const [stockMode, setStockMode] = useState<"消費" | "直接入庫">("消費");
   const [quantity, setQuantity] = useState<number>(1);
 
+  // allowStockIn が false の間は、stockMode の値に関わらず常に「消費」として扱う
+  // （stateとして同期するのではなく描画のたびに導出する）
+  const effectiveMode = allowStockIn ? stockMode : "消費";
+
   const handleSave = () => {
     if (quantity <= 0) {
       alert("1以上の数量を入力してください。");
       return;
     }
-    onSave(item.id, stockMode, quantity);
+    onSave(item.id, effectiveMode, quantity);
   };
 
   return (
@@ -92,7 +96,7 @@ export function StockModal({
         {/* 数量入力 */}
         <div className="space-y-1.5 text-xs">
           <label className="block font-bold text-slate-600">
-            {stockMode === "消費" ? "消費数量" : "入庫数量"} ({item.unit}) *
+            {effectiveMode === "消費" ? "消費数量" : "入庫数量"} ({item.unit}) *
           </label>
           <input
             type="number"
@@ -118,10 +122,10 @@ export function StockModal({
             disabled={isSaving}
             onClick={handleSave}
             className={`px-5 py-2 text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50 ${
-              stockMode === "消費" ? "bg-red-500 hover:bg-red-600" : "bg-emerald-500 hover:bg-emerald-600"
+              effectiveMode === "消費" ? "bg-red-500 hover:bg-red-600" : "bg-emerald-500 hover:bg-emerald-600"
             }`}
           >
-            {isSaving ? "保存中..." : stockMode === "消費" ? "消費を確定する" : "入庫を確定する"}
+            {isSaving ? "保存中..." : effectiveMode === "消費" ? "消費を確定する" : "入庫を確定する"}
           </button>
         </div>
       </div>
