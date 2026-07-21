@@ -229,7 +229,7 @@ export default function AdminOrderRequestsPage() {
                         {req.name}
                       </h3>
                       <p className="text-xs font-mono text-slate-400 mt-0.5">
-                        型番: {req.catalog_no} / 保管場所: {req.location}
+                        型番: {req.catalogNo} / 保管場所: {req.location}
                       </p>
                     </div>
 
@@ -272,9 +272,9 @@ export default function AdminOrderRequestsPage() {
                   <div className="flex md:flex-col justify-end gap-2 whitespace-nowrap pt-2 md:pt-0">
                     {/* 購入先リンク */}
                     <div className="w-full md:w-32">
-                      {req.purchase_url && req.purchase_url !== "#" ? (
+                      {req.purchaseUrl && req.purchaseUrl !== "#" ? (
                         <a
-                          href={req.purchase_url}
+                          href={req.purchaseUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="w-full bg-amber-500 text-white font-bold text-xs py-2.5 hover:bg-amber-400 flex items-center justify-center gap-1 rounded-md text-center shadow-xs transition-colors cursor-pointer"
@@ -349,9 +349,9 @@ export default function AdminOrderRequestsPage() {
                       <span className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
                         {req.id.slice(0, 8)}...
                       </span>
-                      {req.approved_at && (
+                      {req.approvedAt && (
                         <span className="text-xs text-slate-400 font-medium">
-                          承認日時: {req.approved_at}
+                          承認日時: {req.approvedAt}
                         </span>
                       )}
                     </div>

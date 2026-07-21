@@ -152,6 +152,8 @@ export default function AdminOrderHistoryPage() {
                 >
                   <button
                     type="button"
+                    aria-expanded={isOpen}
+                    aria-label={`${group.label} を${isOpen ? "折りたたむ" : "展開する"}`}
                     onClick={() => toggleMonth(group.key)}
                     className="w-full px-6 py-3 flex justify-between items-center text-left hover:bg-slate-50/50 transition-colors cursor-pointer"
                   >

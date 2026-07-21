@@ -47,7 +47,7 @@ export type OrderRequestWithItem = {
 export type OrderRequestUIItem = {
   id: string;
   name: string;
-  catalog_no: string;
+  catalogNo: string;
   quantity: number;
   unit: string;
   location: string;
@@ -56,8 +56,8 @@ export type OrderRequestUIItem = {
   comment: string;
   date: string;
   status: string;
-  purchase_url: string;
-  approved_at: string | null;
+  purchaseUrl: string;
+  approvedAt: string | null;
   rejectedAt: string | null;
   rejectedAtLabel: string | null;
   rejectedReason: string | null;
@@ -81,7 +81,7 @@ export function formatOrderRequestForAdminUI(
   return {
     id: req.id,
     name: itemDetail?.name || "不明な備品",
-    catalog_no: itemDetail?.catalog_no || "なし",
+    catalogNo: itemDetail?.catalog_no || "なし",
     quantity: req.request_quantity || 0,
     unit: itemDetail?.unit || "個",
     location: itemDetail?.location || "保管場所未設定",
@@ -92,8 +92,8 @@ export function formatOrderRequestForAdminUI(
       ? new Date(req.created_at).toLocaleDateString("ja-JP")
       : "-",
     status: req.status || ORDER_REQUEST_STATUS.PENDING,
-    purchase_url: sanitizePurchaseUrl(itemDetail?.purchase_url),
-    approved_at: req.approved_at
+    purchaseUrl: sanitizePurchaseUrl(itemDetail?.purchase_url),
+    approvedAt: req.approved_at
       ? new Date(req.approved_at).toLocaleString("ja-JP")
       : null,
     rejectedAt: req.rejected_at ?? null,
