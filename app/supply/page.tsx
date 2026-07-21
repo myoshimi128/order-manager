@@ -513,17 +513,19 @@ export default function SupplyDashboard() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
-                        <button 
+                        <button
                           type="button"
                           onClick={() => openStockModal(item)}
                           className="bg-brand-dark hover:bg-brand-blue text-white text-xs font-bold py-1 px-2.5 rounded-md transition-colors cursor-pointer"
                         >
-                          消費 / 入庫
+                          {userRole === "役職" ? "消費 / 入庫" : "消費"}
                         </button>
                         <div className="inline-block w-14">
                           <Button href={`/supply/requests?itemId=${item.id}`} className="bg-white hover:bg-slate-50 text-slate-600 hover:text-brand-blue border border-slate-300 text-xs font-bold py-1 px-2 rounded-md">申請</Button>
                         </div>
-                        <button type="button" onClick={() => openEditModal(item)} className="p-1 text-slate-400 hover:text-slate-600 transition-colors inline-flex items-center cursor-pointer text-xs">✏️</button>
+                        {userRole === "役職" && (
+                          <button type="button" onClick={() => openEditModal(item)} className="p-1 text-slate-400 hover:text-slate-600 transition-colors inline-flex items-center cursor-pointer text-xs">✏️</button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -574,6 +576,7 @@ export default function SupplyDashboard() {
           key={stockItem.id}
           item={stockItem}
           isSaving={isSaving}
+          allowStockIn={userRole === "役職"}
           onClose={() => setStockItem(null)}
           onSave={handleSaveStock}
         />
