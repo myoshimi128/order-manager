@@ -11,84 +11,30 @@ import {
   getOrderRequests,
   updateOrderRequestStatus,
   confirmDelivery,
+  formatOrderRequestForAdminUI,
   ORDER_REQUEST_STATUS,
+  OrderRequestUIItem,
 } from "@/services/orderRequests";
-
-// Supabaseからの取得レスポンス用の型定義
-type OrderRequestResponse = {
-  id: string;
-  request_quantity: number;
-  status: string;
-  comment: string | null;
-  created_at: string;
-  approved_at: string | null;
-  item_id: string;
-  items: {
-    name: string;
-    catalog_no: string | null;
-    unit: string;
-    location: string;
-    purchase_url: string | null;
-    current_stock: number;
-  } | null;
-};
-
-// 画面表示用に整形した型定義
-type RequestUIItem = {
-  id: string;
-  name: string;
-  catalog_no: string;
-  quantity: number;
-  unit: string;
-  location: string;
-  currentStock: number;
-  requester: string;
-  comment: string;
-  date: string;
-  status: string;
-  purchase_url: string;
-  approved_at: string | null;
-};
 
 export default function AdminOrderRequestsPage() {
   const router = useRouter();
-  const [requests, setRequests] = useState<RequestUIItem[]>([]);
+  const [requests, setRequests] = useState<OrderRequestUIItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<{ id: string; name: string } | null>(null);
   const [isRejecting, setIsRejecting] = useState(false);
 
   // データ取得・整形を行う共通処理
+  // 過去歴（納品済み・却下）は別ページで取得するため、ここでは
+  // 承認待ち・納品待ちのみを取得し、増え続ける履歴データの負荷を避ける
   const loadRequests = async () => {
     try {
-      const data = await getOrderRequests();
+      const data = await getOrderRequests([
+        ORDER_REQUEST_STATUS.PENDING,
+        ORDER_REQUEST_STATUS.APPROVED,
+      ]);
 
-      const formatted: RequestUIItem[] = (
-        (data as unknown as OrderRequestResponse[]) || []
-      ).map((item) => {
-        const itemDetail = item.items;
-        return {
-          id: item.id,
-          name: itemDetail?.name || "不明な備品",
-          catalog_no: itemDetail?.catalog_no || "なし",
-          quantity: item.request_quantity || 0,
-          unit: itemDetail?.unit || "個",
-          location: itemDetail?.location || "保管場所未設定",
-          currentStock: itemDetail?.current_stock ?? 0,
-          requester: "現場スタッフ",
-          comment: item.comment || "なし",
-          date: item.created_at
-            ? new Date(item.created_at).toLocaleDateString("ja-JP")
-            : "-",
-          status: item.status || ORDER_REQUEST_STATUS.PENDING,
-          purchase_url: itemDetail?.purchase_url || "#",
-          approved_at: item.approved_at
-            ? new Date(item.approved_at).toLocaleString("ja-JP")
-            : null,
-        };
-      });
-
-      setRequests(formatted);
+      setRequests(data.map(formatOrderRequestForAdminUI));
     } catch (err) {
       console.error("データ取得エラー:", err);
     } finally {
@@ -179,17 +125,12 @@ export default function AdminOrderRequestsPage() {
     }
   };
 
-  // 承認待ち／納品待ち／履歴（納品済み・却下）に分類
+  // 承認待ち／納品待ちに分類（納品済み・却下は /supply/admin/history で扱う）
   const activeRequests = requests.filter(
     (req) => req.status === ORDER_REQUEST_STATUS.PENDING
   );
   const deliveryPendingRequests = requests.filter(
     (req) => req.status === ORDER_REQUEST_STATUS.APPROVED
-  );
-  const historyRequests = requests.filter(
-    (req) =>
-      req.status === ORDER_REQUEST_STATUS.DELIVERED ||
-      req.status === ORDER_REQUEST_STATUS.REJECTED
   );
 
   return (
@@ -211,6 +152,16 @@ export default function AdminOrderRequestsPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            {/* 過去歴 */}
+            <div className="w-32">
+              <Button
+                href="/supply/admin/history"
+                className="border border-slate-300 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50"
+              >
+                🗂️ 過去歴
+              </Button>
+            </div>
+
             {/* 備品登録 */}
             <div className="w-36">
               <Button
@@ -278,7 +229,7 @@ export default function AdminOrderRequestsPage() {
                         {req.name}
                       </h3>
                       <p className="text-xs font-mono text-slate-400 mt-0.5">
-                        型番: {req.catalog_no} / 保管場所: {req.location}
+                        型番: {req.catalogNo} / 保管場所: {req.location}
                       </p>
                     </div>
 
@@ -321,9 +272,9 @@ export default function AdminOrderRequestsPage() {
                   <div className="flex md:flex-col justify-end gap-2 whitespace-nowrap pt-2 md:pt-0">
                     {/* 購入先リンク */}
                     <div className="w-full md:w-32">
-                      {req.purchase_url && req.purchase_url !== "#" ? (
+                      {req.purchaseUrl && req.purchaseUrl !== "#" ? (
                         <a
-                          href={req.purchase_url}
+                          href={req.purchaseUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="w-full bg-amber-500 text-white font-bold text-xs py-2.5 hover:bg-amber-400 flex items-center justify-center gap-1 rounded-md text-center shadow-xs transition-colors cursor-pointer"
@@ -398,9 +349,9 @@ export default function AdminOrderRequestsPage() {
                       <span className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
                         {req.id.slice(0, 8)}...
                       </span>
-                      {req.approved_at && (
+                      {req.approvedAt && (
                         <span className="text-xs text-slate-400 font-medium">
-                          承認日時: {req.approved_at}
+                          承認日時: {req.approvedAt}
                         </span>
                       )}
                     </div>
@@ -426,51 +377,6 @@ export default function AdminOrderRequestsPage() {
           )}
         </div>
 
-        {/* 履歴エリア */}
-        {historyRequests.length > 0 && (
-          <div className="pt-6 border-t border-slate-200">
-            <h2 className="text-xs font-bold text-slate-400 tracking-wider uppercase mb-3">
-              ✅ 処理済みのタスク（履歴: {historyRequests.length}件）
-            </h2>
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-400 border-b border-slate-100 font-bold">
-                    <th className="p-4">ID / 備品名</th>
-                    <th className="p-4">発注数量</th>
-                    <th className="p-4">状態</th>
-                    <th className="p-4 text-right">承認完了時刻</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-600 font-medium">
-                  {historyRequests.map((req) => (
-                    <tr key={req.id} className="bg-slate-50/30">
-                      <td className="p-4">
-                        <span className="font-mono text-slate-400 mr-2">
-                          [{req.id.slice(0, 8)}]
-                        </span>
-                        <span className="font-bold text-slate-700">
-                          {req.name}
-                        </span>
-                      </td>
-                      <td className="p-4 font-bold text-slate-800">
-                        {req.quantity} {req.unit}
-                      </td>
-                      <td className="p-4">
-                        <span className="px-2 py-0.5 bg-blue-50 border border-blue-100 text-blue-600 rounded-full font-bold text-[10px]">
-                          {req.status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right font-mono text-slate-400">
-                        {req.approved_at ?? "-"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 新規備品登録モーダル */}

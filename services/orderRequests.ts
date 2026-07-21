@@ -43,6 +43,71 @@ export type OrderRequestWithItem = {
   } | null;
 };
 
+// 管理画面（承認待ち一覧・過去歴）向けに整形した表示用の型
+export type OrderRequestUIItem = {
+  id: string;
+  name: string;
+  catalogNo: string;
+  quantity: number;
+  unit: string;
+  location: string;
+  currentStock: number;
+  requester: string;
+  comment: string;
+  date: string;
+  status: string;
+  purchaseUrl: string;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  rejectedAtLabel: string | null;
+  rejectedReason: string | null;
+  deliveredAt: string | null;
+  deliveredAtLabel: string | null;
+};
+
+// href に渡しても安全な http/https のURLのみ許可し、それ以外（javascript: など）は無効化する
+function sanitizePurchaseUrl(url?: string | null): string {
+  if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+    return url;
+  }
+  return "#";
+}
+
+// 管理画面の承認待ち一覧・過去歴ページの両方から使う共通の整形処理
+export function formatOrderRequestForAdminUI(
+  req: OrderRequestWithItem
+): OrderRequestUIItem {
+  const itemDetail = req.items;
+  return {
+    id: req.id,
+    name: itemDetail?.name || "不明な備品",
+    catalogNo: itemDetail?.catalog_no || "なし",
+    quantity: req.request_quantity || 0,
+    unit: itemDetail?.unit || "個",
+    location: itemDetail?.location || "保管場所未設定",
+    currentStock: itemDetail?.current_stock ?? 0,
+    requester: "現場スタッフ",
+    comment: req.comment || "なし",
+    date: req.created_at
+      ? new Date(req.created_at).toLocaleDateString("ja-JP")
+      : "-",
+    status: req.status || ORDER_REQUEST_STATUS.PENDING,
+    purchaseUrl: sanitizePurchaseUrl(itemDetail?.purchase_url),
+    approvedAt: req.approved_at
+      ? new Date(req.approved_at).toLocaleString("ja-JP")
+      : null,
+    rejectedAt: req.rejected_at ?? null,
+    rejectedAtLabel: req.rejected_at
+      ? new Date(req.rejected_at).toLocaleString("ja-JP")
+      : null,
+    rejectedReason: req.rejected_reason ?? null,
+    deliveredAt: req.delivered_at ?? null,
+    deliveredAtLabel: req.delivered_at
+      ? new Date(req.delivered_at).toLocaleString("ja-JP")
+      : null,
+  };
+}
+
 // SupabaseへのINSERT用型定義（any回避）
 type OrderRequestPayload = {
   item_id: string;
@@ -113,14 +178,22 @@ export async function createOrderRequest({
 /**
  * 2. リクエスト一覧を取得する処理 (管理者用・一般履歴用 共通)
  * - itemsテーブルとのリレーション設定がなくてもエラーにならない安全な2段階取得
+ * - statuses を渡すと該当ステータスのみに絞り込む（未指定なら全件）。
+ *   一覧画面が「納品済み」等の増え続ける履歴データまで毎回取得しないようにするため。
  */
-export async function getOrderRequests() {
+export async function getOrderRequests(statuses?: OrderRequestStatus[]) {
   try {
-    // 1) order_requests テーブルの全データを取得
-    const { data: requests, error: reqError } = await supabase
+    // 1) order_requests テーブルのデータを取得（statuses指定時は絞り込み）
+    let query = supabase
       .from("order_requests")
       .select("*")
       .order("created_at", { ascending: false });
+
+    if (statuses && statuses.length > 0) {
+      query = query.in("status", statuses);
+    }
+
+    const { data: requests, error: reqError } = await query;
 
     if (reqError) {
       console.error("リクエスト一覧の取得に失敗しました:", reqError);
