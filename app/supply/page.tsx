@@ -6,6 +6,7 @@ import { Button } from "@/components/Button";
 import { getCurrentUser, getCurrentAppUser } from "@/services/auth";
 import { type User } from "@/services/users";
 import { StockModal, Item } from "@/components/StockModal";
+import { RequestStatusModal } from "@/components/RequestStatusModal";
 import { 
   getItems, 
   recordStockMovement, 
@@ -24,6 +25,12 @@ import {
 export default function SupplyDashboard() {
   const [items, setItems] = useState<Item[]>([]);
   const [requestedItemIds, setRequestedItemIds] = useState<Set<string>>(new Set());
+  // モーダル等でリクエスト単位の詳細（申請者・申請日時など）を表示するため、
+  // 取得済みリクエストの生データも保持しておく
+  const [allActiveRequests, setAllActiveRequests] = useState<OrderRequestWithItem[]>([]);
+  const [myPendingRequests, setMyPendingRequests] = useState<
+    OrderRequestWithItem[]
+  >([]);
   const [myDeliveryPendingRequests, setMyDeliveryPendingRequests] = useState<
     OrderRequestWithItem[]
   >([]);
@@ -35,6 +42,7 @@ export default function SupplyDashboard() {
   const [userRole, setUserRole] = useState<User["role"] | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
+  const [requestStatusItem, setRequestStatusItem] = useState<Item | null>(null);
 
   // 出入庫モーダル用ステート
   const [stockItem, setStockItem] = useState<Item | null>(null);
@@ -149,6 +157,9 @@ export default function SupplyDashboard() {
     allRequests: OrderRequestWithItem[],
     userId: string | null
   ) => {
+    // 「リクエスト中」ステータスの詳細モーダル用に生データを保持
+    setAllActiveRequests(allRequests);
+
     // 未完了（承認待ち / 納品待ち）のリクエストがある item_id を抽出
     const activeItemIds = new Set<string>(
       allRequests
@@ -160,6 +171,15 @@ export default function SupplyDashboard() {
         .map((req) => req.item_id)
     );
     setRequestedItemIds(activeItemIds);
+
+    // 自分が申請し、まだ承認されていない（承認待ち）リクエストを抽出
+    setMyPendingRequests(
+      allRequests.filter(
+        (req) =>
+          req.status === ORDER_REQUEST_STATUS.PENDING &&
+          req.requested_by_user_id === userId
+      )
+    );
 
     // 自分が申請し、現在「納品待ち」になっているリクエストを抽出
     setMyDeliveryPendingRequests(
@@ -188,7 +208,7 @@ export default function SupplyDashboard() {
         const [itemsData, requestsData, { data: authData }, appUser] =
           await Promise.all([
             getItems(),
-            getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED]),
+            getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED], { includeRequester: true }),
             getCurrentUser(),
             getCurrentAppUser(),
           ]);
@@ -216,7 +236,7 @@ export default function SupplyDashboard() {
 
       const [itemsData, requestsData, { data: authData }] = await Promise.all([
         getItems(),
-        getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED]),
+        getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED], { includeRequester: true }),
         getCurrentUser(),
       ]);
       setItems(itemsData);
@@ -242,7 +262,7 @@ export default function SupplyDashboard() {
       await acknowledgeRejection(requestId);
 
       const [requestsData, { data: authData }] = await Promise.all([
-        getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED]),
+        getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED], { includeRequester: true }),
         getCurrentUser(),
       ]);
       applyRequestsData(
@@ -326,6 +346,44 @@ export default function SupplyDashboard() {
           </div>
         </div>
       </div>
+
+      {/* あなたが申請中の備品エリア（承認待ち） */}
+      {myPendingRequests.length > 0 && (
+        <div className="bg-amber-50/60 rounded-2xl p-5 border border-amber-100 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-800">
+              🕒 あなたが申請中の備品
+            </h2>
+            <span className="text-xs font-bold text-amber-600">
+              {myPendingRequests.length} 件
+            </span>
+          </div>
+          <div className="space-y-2">
+            {myPendingRequests.map((req) => (
+              <div
+                key={req.id}
+                className="bg-white rounded-xl border border-amber-100/80 px-4 py-3"
+              >
+                <div className="text-sm font-bold text-slate-800">
+                  {req.items?.name ?? "不明な備品"}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  希望数量: {req.request_quantity} {req.items?.unit ?? "個"}
+                  {req.created_at && (
+                    <>
+                      {" "}
+                      ／ 申請日時: {new Date(req.created_at).toLocaleString("ja-JP")}
+                    </>
+                  )}
+                </div>
+                <div className="text-xs text-amber-600 font-bold mt-1">
+                  承認待ちです。役職者の承認をお待ちください。
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 自分がリクエストした納品待ち備品エリア */}
       {myDeliveryPendingRequests.length > 0 && (
@@ -504,14 +562,23 @@ export default function SupplyDashboard() {
                       </td>
                       <td className="px-6 py-4 text-slate-400 text-xs">{item.threshold_stock} {item.unit}</td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${
-                          statusInfo.status === "in_stock" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                          statusInfo.status === "requested" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                          statusInfo.status === "low_stock" ? "bg-orange-50 text-orange-600 border-orange-100" :
-                          "bg-red-100 text-red-700 border-red-200"
-                        }`}>
-                          {statusInfo.label}
-                        </span>
+                        {statusInfo.status === "requested" ? (
+                          <button
+                            type="button"
+                            onClick={() => setRequestStatusItem(item)}
+                            className="px-2 py-0.5 rounded-full text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100 transition-colors cursor-pointer"
+                          >
+                            {statusInfo.label}
+                          </button>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${
+                            statusInfo.status === "in_stock" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                            statusInfo.status === "low_stock" ? "bg-orange-50 text-orange-600 border-orange-100" :
+                            "bg-red-100 text-red-700 border-red-200"
+                          }`}>
+                            {statusInfo.label}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
                         <button
@@ -580,6 +647,20 @@ export default function SupplyDashboard() {
           allowStockIn={userRole === "役職"}
           onClose={() => setStockItem(null)}
           onSave={handleSaveStock}
+        />
+      )}
+
+      {/* リクエスト中詳細モーダル */}
+      {requestStatusItem && (
+        <RequestStatusModal
+          itemName={requestStatusItem.name}
+          requests={allActiveRequests.filter(
+            (req) =>
+              req.item_id === requestStatusItem.id &&
+              (req.status === ORDER_REQUEST_STATUS.PENDING ||
+                req.status === ORDER_REQUEST_STATUS.APPROVED)
+          )}
+          onClose={() => setRequestStatusItem(null)}
         />
       )}
     </Layout>
