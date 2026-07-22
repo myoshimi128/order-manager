@@ -29,10 +29,10 @@ export default function AdminOrderRequestsPage() {
   // 承認待ち・納品待ちのみを取得し、増え続ける履歴データの負荷を避ける
   const loadRequests = async () => {
     try {
-      const data = await getOrderRequests([
-        ORDER_REQUEST_STATUS.PENDING,
-        ORDER_REQUEST_STATUS.APPROVED,
-      ]);
+      const data = await getOrderRequests(
+        [ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED],
+        { includeRequester: true }
+      );
 
       setRequests(data.map(formatOrderRequestForAdminUI));
     } catch (err) {
