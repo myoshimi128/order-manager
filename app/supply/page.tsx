@@ -273,12 +273,13 @@ export default function SupplyDashboard() {
       );
     }
 
-    // アラート（要補充・在庫切れ・リクエスト中）のフィルタリング
+    // アラート（要補充・在庫切れ）のフィルタリング
     if (filterMode === "alert") {
       result = result.filter((item) => {
         const hasReq = requestedItemIds.has(item.id);
         const statusInfo: ItemStatusInfo = getItemStatus(item.current_stock, item.threshold_stock, hasReq);
-        return statusInfo.status !== "in_stock";
+        // 件数表示（displayAlertCount）と同じ定義に統一：要補充・在庫切れのみをアラート対象とする
+        return statusInfo.status === "low_stock" || statusInfo.status === "out_of_stock";
       });
     }
 
