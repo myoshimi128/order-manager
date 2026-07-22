@@ -66,14 +66,6 @@ export function AddItemModal({ isOpen, onClose }: AddItemModalProps) {
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 relative">
-        <button
-          onClick={onClose}
-          disabled={isSubmitting}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg cursor-pointer disabled:opacity-50"
-        >
-          ✕
-        </button>
-
         <h3 className="text-base font-bold text-slate-800">
           備品の新規登録
         </h3>

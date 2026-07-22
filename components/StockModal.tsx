@@ -46,15 +46,6 @@ export function StockModal({
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-5 relative">
-        {/* 閉じるボタン */}
-        <button
-          onClick={onClose}
-          disabled={isSaving}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg cursor-pointer disabled:opacity-50"
-        >
-          ✕
-        </button>
-
         {/* ヘッダー */}
         <div>
           <h3 className="text-base font-bold text-slate-800">出入庫の記録</h3>
