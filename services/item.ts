@@ -18,8 +18,9 @@ export function getItemStatus(
   thresholdStock: number,
   hasActiveRequest: boolean = false
 ): ItemStatusInfo {
-  // 1. 基準数以下（在庫切れ含む）で、既にリクエスト中の場合は最優先で「リクエスト中」にする
-  if (currentStock <= thresholdStock && hasActiveRequest) {
+  // 1. 在庫数に関わらず、リクエスト中の場合は最優先で「リクエスト中」にする
+  //    （在庫が十分にあっても事前にリクエストを送信できる仕様のため）
+  if (hasActiveRequest) {
     return {
       status: "requested",
       label: "リクエスト中",
