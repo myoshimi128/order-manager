@@ -50,7 +50,7 @@ export default function SupplyDashboard() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<"all" | "alert">("all");
-  const [sortKey, setSortKey] = useState<"none" | "stock-asc" | "stock-desc" | "name" | "location">("none");
+  const [sortKey, setSortKey] = useState<"none" | "stock-asc" | "stock-desc" | "name" | "location">("location");
 
   // --- 出入庫モーダルを開く処理 ---
   const openStockModal = (item: Item) => {
@@ -608,7 +608,6 @@ export default function SupplyDashboard() {
       {isEditOpen && editItem && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 relative">
-            <button onClick={() => { setIsEditOpen(false); setEditItem(null); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg cursor-pointer">✕</button>
             <h3 className="text-base font-bold text-slate-800">備品情報の編集</h3>
             <div className="space-y-3 text-xs text-slate-700">
               <div>

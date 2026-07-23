@@ -22,15 +22,6 @@ export function RequestStatusModal({
         aria-labelledby="request-status-title"
         className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 relative"
       >
-        <button
-          type="button"
-          aria-label="閉じる"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg cursor-pointer"
-        >
-          ✕
-        </button>
-
         <div>
           <h3 id="request-status-title" className="text-base font-bold text-slate-800">
             リクエスト中の詳細
