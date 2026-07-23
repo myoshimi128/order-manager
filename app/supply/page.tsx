@@ -27,7 +27,7 @@ export default function SupplyDashboard() {
   const [requestedItemIds, setRequestedItemIds] = useState<Set<string>>(new Set());
   // モーダル等でリクエスト単位の詳細（申請者・申請日時など）を表示するため、
   // 取得済みリクエストの生データも保持しておく
-  const [allActiveRequests, setAllActiveRequests] = useState<OrderRequestWithItem[]>([]);
+  const [allOrderRequests, setAllOrderRequests] = useState<OrderRequestWithItem[]>([]);
   const [myPendingRequests, setMyPendingRequests] = useState<
     OrderRequestWithItem[]
   >([]);
@@ -158,7 +158,7 @@ export default function SupplyDashboard() {
     userId: string | null
   ) => {
     // 「リクエスト中」ステータスの詳細モーダル用に生データを保持
-    setAllActiveRequests(allRequests);
+    setAllOrderRequests(allRequests);
 
     // 未完了（承認待ち / 納品待ち）のリクエストがある item_id を抽出
     const activeItemIds = new Set<string>(
@@ -654,7 +654,7 @@ export default function SupplyDashboard() {
       {requestStatusItem && (
         <RequestStatusModal
           itemName={requestStatusItem.name}
-          requests={allActiveRequests.filter(
+          requests={allOrderRequests.filter(
             (req) =>
               req.item_id === requestStatusItem.id &&
               (req.status === ORDER_REQUEST_STATUS.PENDING ||
