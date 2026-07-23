@@ -345,16 +345,11 @@ export default function AdminOrderRequestsPage() {
                   className="p-5 hover:bg-slate-50/50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
                 >
                   <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
-                        {req.id.slice(0, 8)}...
-                      </span>
-                      {req.approvedAt && (
-                        <span className="text-xs text-slate-400 font-medium">
-                          承認日時: {req.approvedAt}
-                        </span>
-                      )}
-                    </div>
+                    {req.approvedAt && (
+                      <div className="text-xs text-slate-400 font-medium">
+                        承認日時: {req.approvedAt}
+                      </div>
+                    )}
                     <div className="text-sm font-bold text-slate-800 mt-1">
                       {req.name}
                     </div>

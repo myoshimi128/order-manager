@@ -7,6 +7,8 @@ import { getCurrentUser, getCurrentAppUser } from "@/services/auth";
 import { type User } from "@/services/users";
 import { StockModal, Item } from "@/components/StockModal";
 import { RequestStatusModal } from "@/components/RequestStatusModal";
+import { Modal } from "@/components/Modal";
+import { RequestPanel } from "@/components/RequestPanel";
 import { 
   getItems, 
   recordStockMovement, 
@@ -25,9 +27,6 @@ import {
 export default function SupplyDashboard() {
   const [items, setItems] = useState<Item[]>([]);
   const [requestedItemIds, setRequestedItemIds] = useState<Set<string>>(new Set());
-  // モーダル等でリクエスト単位の詳細（申請者・申請日時など）を表示するため、
-  // 取得済みリクエストの生データも保持しておく
-  const [allOrderRequests, setAllOrderRequests] = useState<OrderRequestWithItem[]>([]);
   const [myPendingRequests, setMyPendingRequests] = useState<
     OrderRequestWithItem[]
   >([]);
@@ -42,7 +41,10 @@ export default function SupplyDashboard() {
   const [userRole, setUserRole] = useState<User["role"] | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
+  // 「リクエスト中」詳細モーダル用ステート（クリック時にその備品分だけ遅延取得する）
   const [requestStatusItem, setRequestStatusItem] = useState<Item | null>(null);
+  const [requestStatusRequests, setRequestStatusRequests] = useState<OrderRequestWithItem[]>([]);
+  const [isLoadingRequestStatus, setIsLoadingRequestStatus] = useState(false);
 
   // 出入庫モーダル用ステート
   const [stockItem, setStockItem] = useState<Item | null>(null);
@@ -157,9 +159,6 @@ export default function SupplyDashboard() {
     allRequests: OrderRequestWithItem[],
     userId: string | null
   ) => {
-    // 「リクエスト中」ステータスの詳細モーダル用に生データを保持
-    setAllOrderRequests(allRequests);
-
     // 未完了（承認待ち / 納品待ち）のリクエストがある item_id を抽出
     const activeItemIds = new Set<string>(
       allRequests
@@ -208,7 +207,7 @@ export default function SupplyDashboard() {
         const [itemsData, requestsData, { data: authData }, appUser] =
           await Promise.all([
             getItems(),
-            getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED], { includeRequester: true }),
+            getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED]),
             getCurrentUser(),
             getCurrentAppUser(),
           ]);
@@ -236,7 +235,7 @@ export default function SupplyDashboard() {
 
       const [itemsData, requestsData, { data: authData }] = await Promise.all([
         getItems(),
-        getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED], { includeRequester: true }),
+        getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED]),
         getCurrentUser(),
       ]);
       setItems(itemsData);
@@ -262,7 +261,7 @@ export default function SupplyDashboard() {
       await acknowledgeRejection(requestId);
 
       const [requestsData, { data: authData }] = await Promise.all([
-        getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED], { includeRequester: true }),
+        getOrderRequests([ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED, ORDER_REQUEST_STATUS.REJECTED]),
         getCurrentUser(),
       ]);
       applyRequestsData(
@@ -277,6 +276,30 @@ export default function SupplyDashboard() {
     } finally {
       setAcknowledgingRequestId(null);
     }
+  };
+
+  // --- 「リクエスト中」詳細モーダルを開く処理（その備品分だけ遅延取得する） ---
+  const handleOpenRequestStatus = async (item: Item) => {
+    setRequestStatusItem(item);
+    setIsLoadingRequestStatus(true);
+
+    try {
+      const requests = await getOrderRequests(
+        [ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED],
+        { includeRequester: true, itemId: item.id }
+      );
+      setRequestStatusRequests(requests as OrderRequestWithItem[]);
+    } catch (error) {
+      console.error("リクエスト詳細の取得エラー:", error);
+      setRequestStatusRequests([]);
+    } finally {
+      setIsLoadingRequestStatus(false);
+    }
+  };
+
+  const closeRequestStatusModal = () => {
+    setRequestStatusItem(null);
+    setRequestStatusRequests([]);
   };
 
   // 検索・フィルター・ソートを適用する処理
@@ -348,133 +371,89 @@ export default function SupplyDashboard() {
       </div>
 
       {/* あなたが申請中の備品エリア（承認待ち） */}
-      {myPendingRequests.length > 0 && (
-        <div className="bg-amber-50/60 rounded-2xl p-5 border border-amber-100 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-800">
-              🕒 あなたが申請中の備品
-            </h2>
-            <span className="text-xs font-bold text-amber-600">
-              {myPendingRequests.length} 件
-            </span>
-          </div>
-          <div className="space-y-2">
-            {myPendingRequests.map((req) => (
-              <div
-                key={req.id}
-                className="bg-white rounded-xl border border-amber-100/80 px-4 py-3"
-              >
-                <div className="text-sm font-bold text-slate-800">
-                  {req.items?.name ?? "不明な備品"}
-                </div>
-                <div className="text-xs text-slate-500 mt-0.5">
-                  希望数量: {req.request_quantity} {req.items?.unit ?? "個"}
-                  {req.created_at && (
-                    <>
-                      {" "}
-                      ／ 申請日時: {new Date(req.created_at).toLocaleString("ja-JP")}
-                    </>
-                  )}
-                </div>
-                <div className="text-xs text-amber-600 font-bold mt-1">
-                  承認待ちです。役職者の承認をお待ちください。
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <RequestPanel
+        icon="🕒"
+        color="amber"
+        title="あなたが申請中の備品"
+        requests={myPendingRequests}
+        renderDetails={(req) => (
+          <>
+            <div className="text-xs text-slate-500 mt-0.5">
+              希望数量: {req.request_quantity} {req.items?.unit ?? "個"}
+              {req.created_at && (
+                <>
+                  {" "}
+                  ／ 申請日時: {new Date(req.created_at).toLocaleString("ja-JP")}
+                </>
+              )}
+            </div>
+            <div className="text-xs text-amber-600 font-bold mt-1">
+              承認待ちです。役職者の承認をお待ちください。
+            </div>
+          </>
+        )}
+      />
 
       {/* 自分がリクエストした納品待ち備品エリア */}
-      {myDeliveryPendingRequests.length > 0 && (
-        <div className="bg-blue-50/60 rounded-2xl p-5 border border-blue-100 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-800">
-              📦 あなたが申請した納品待ちの備品
-            </h2>
-            <span className="text-xs font-bold text-blue-600">
-              {myDeliveryPendingRequests.length} 件
-            </span>
+      <RequestPanel
+        icon="📦"
+        color="blue"
+        title="あなたが申請した納品待ちの備品"
+        requests={myDeliveryPendingRequests}
+        renderDetails={(req) => (
+          <div className="text-xs text-slate-500 mt-0.5">
+            希望数量: {req.request_quantity} {req.items?.unit ?? "個"}
+            {req.approved_at && (
+              <>
+                {" "}
+                ／ 承認日時: {new Date(req.approved_at).toLocaleString("ja-JP")}
+              </>
+            )}
           </div>
-          <div className="space-y-2">
-            {myDeliveryPendingRequests.map((req) => (
-              <div
-                key={req.id}
-                className="bg-white rounded-xl border border-blue-100/80 px-4 py-3 flex items-center justify-between gap-4"
-              >
-                <div>
-                  <div className="text-sm font-bold text-slate-800">
-                    {req.items?.name ?? "不明な備品"}
-                  </div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    希望数量: {req.request_quantity} {req.items?.unit ?? "個"}
-                    {req.approved_at && (
-                      <>
-                        {" "}
-                        ／ 承認日時: {new Date(req.approved_at).toLocaleString("ja-JP")}
-                      </>
-                    )}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleConfirmDelivery(req.id, req.items?.name ?? "不明な備品")
-                  }
-                  disabled={confirmingRequestId === req.id}
-                  className="bg-brand-dark hover:bg-brand-blue text-white text-xs font-bold py-2 px-3 rounded-md transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                >
-                  {confirmingRequestId === req.id ? "処理中..." : "✅ 納品完了"}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+        )}
+        renderAction={(req) => (
+          <button
+            type="button"
+            onClick={() =>
+              handleConfirmDelivery(req.id, req.items?.name ?? "不明な備品")
+            }
+            disabled={confirmingRequestId === req.id}
+            className="bg-brand-dark hover:bg-brand-blue text-white text-xs font-bold py-2 px-3 rounded-md transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+          >
+            {confirmingRequestId === req.id ? "処理中..." : "✅ 納品完了"}
+          </button>
+        )}
+      />
 
       {/* 却下されたリクエストエリア */}
-      {myRejectedRequests.length > 0 && (
-        <div className="bg-red-50/60 rounded-2xl p-5 border border-red-100 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-800">
-              ❌ 却下されたリクエスト
-            </h2>
-            <span className="text-xs font-bold text-red-600">
-              {myRejectedRequests.length} 件
-            </span>
-          </div>
-          <div className="space-y-2">
-            {myRejectedRequests.map((req) => (
-              <div
-                key={req.id}
-                className="bg-white rounded-xl border border-red-100/80 px-4 py-3 flex items-center justify-between gap-4"
-              >
-                <div>
-                  <div className="text-sm font-bold text-slate-800">
-                    {req.items?.name ?? "不明な備品"}
-                  </div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    希望数量: {req.request_quantity} {req.items?.unit ?? "個"}
-                  </div>
-                  {req.rejected_reason && (
-                    <div className="text-xs text-red-600 mt-1">
-                      却下理由: 「{req.rejected_reason}」
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleAcknowledgeRejection(req.id)}
-                  disabled={acknowledgingRequestId === req.id}
-                  className="border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold py-2 px-3 rounded-md transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                >
-                  {acknowledgingRequestId === req.id ? "処理中..." : "確認しました"}
-                </button>
+      <RequestPanel
+        icon="❌"
+        color="red"
+        title="却下されたリクエスト"
+        requests={myRejectedRequests}
+        renderDetails={(req) => (
+          <>
+            <div className="text-xs text-slate-500 mt-0.5">
+              希望数量: {req.request_quantity} {req.items?.unit ?? "個"}
+            </div>
+            {req.rejected_reason && (
+              <div className="text-xs text-red-600 mt-1">
+                却下理由: 「{req.rejected_reason}」
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            )}
+          </>
+        )}
+        renderAction={(req) => (
+          <button
+            type="button"
+            onClick={() => handleAcknowledgeRejection(req.id)}
+            disabled={acknowledgingRequestId === req.id}
+            className="border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold py-2 px-3 rounded-md transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+          >
+            {acknowledgingRequestId === req.id ? "処理中..." : "確認しました"}
+          </button>
+        )}
+      />
 
       {/* 上部サマリーカード */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -565,7 +544,7 @@ export default function SupplyDashboard() {
                         {statusInfo.status === "requested" ? (
                           <button
                             type="button"
-                            onClick={() => setRequestStatusItem(item)}
+                            onClick={() => handleOpenRequestStatus(item)}
                             className="px-2 py-0.5 rounded-full text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100 transition-colors cursor-pointer"
                           >
                             {statusInfo.label}
@@ -606,35 +585,38 @@ export default function SupplyDashboard() {
 
       {/* 編集モーダル */}
       {isEditOpen && editItem && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 relative">
-            <h3 className="text-base font-bold text-slate-800">備品情報の編集</h3>
-            <div className="space-y-3 text-xs text-slate-700">
-              <div>
-                <label className="block font-bold text-slate-600 mb-1">備品名 *</label>
-                <input type="text" value={editItem.name} onChange={(e) => setEditItem({ ...editItem, name: e.target.value })} className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-600 mb-1">型番</label>
-                  <input type="text" value={editItem.catalog_no || ""} onChange={(e) => setEditItem({ ...editItem, catalog_no: e.target.value })} className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-600 mb-1">単位</label>
-                  <input type="text" value={editItem.unit} onChange={(e) => setEditItem({ ...editItem, unit: e.target.value })} className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
-                </div>
-              </div>
-              <div>
-                <label className="block font-bold text-slate-600 mb-1">保管場所 *</label>
-                <input type="text" value={editItem.location} onChange={(e) => setEditItem({ ...editItem, location: e.target.value })} className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <Modal
+          titleId="edit-item-modal-title"
+          title="備品情報の編集"
+          maxWidthClassName="max-w-lg"
+          footer={
+            <>
               <button onClick={() => { setIsEditOpen(false); setEditItem(null); }} className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-600 font-semibold text-xs rounded-lg transition-colors cursor-pointer">キャンセル</button>
               <button onClick={handleSaveEdit} className="px-4 py-2 bg-brand-dark text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer">保存する</button>
+            </>
+          }
+        >
+          <div className="space-y-3 text-xs text-slate-700">
+            <div>
+              <label className="block font-bold text-slate-600 mb-1">備品名 *</label>
+              <input type="text" value={editItem.name} onChange={(e) => setEditItem({ ...editItem, name: e.target.value })} className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-600 mb-1">型番</label>
+                <input type="text" value={editItem.catalog_no || ""} onChange={(e) => setEditItem({ ...editItem, catalog_no: e.target.value })} className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-600 mb-1">単位</label>
+                <input type="text" value={editItem.unit} onChange={(e) => setEditItem({ ...editItem, unit: e.target.value })} className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
+              </div>
+            </div>
+            <div>
+              <label className="block font-bold text-slate-600 mb-1">保管場所 *</label>
+              <input type="text" value={editItem.location} onChange={(e) => setEditItem({ ...editItem, location: e.target.value })} className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:outline-hidden" />
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* 出入庫モーダル */}
@@ -653,13 +635,9 @@ export default function SupplyDashboard() {
       {requestStatusItem && (
         <RequestStatusModal
           itemName={requestStatusItem.name}
-          requests={allOrderRequests.filter(
-            (req) =>
-              req.item_id === requestStatusItem.id &&
-              (req.status === ORDER_REQUEST_STATUS.PENDING ||
-                req.status === ORDER_REQUEST_STATUS.APPROVED)
-          )}
-          onClose={() => setRequestStatusItem(null)}
+          requests={requestStatusRequests}
+          isLoading={isLoadingRequestStatus}
+          onClose={closeRequestStatusModal}
         />
       )}
     </Layout>

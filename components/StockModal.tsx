@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { Modal } from "@/components/Modal";
 
 // DB構成に合わせて status カラムを除外した Item 型
 export type Item = {
@@ -44,62 +45,16 @@ export function StockModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-5 relative">
-        {/* ヘッダー */}
-        <div>
-          <h3 className="text-base font-bold text-slate-800">出入庫の記録</h3>
-          <p className="text-xs text-slate-500 mt-1">
-            対象: <span className="font-bold text-slate-700">{item.name}</span> （現在: {item.current_stock}{item.unit}）
-          </p>
-        </div>
-
-        {/* モード切り替え（消費のみ許可の場合はトグル自体を表示しない） */}
-        {allowStockIn ? (
-          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => setStockMode("消費")}
-              className={`py-2 rounded-lg transition-all cursor-pointer ${
-                stockMode === "消費" ? "bg-white text-red-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              🔴 消費 (減らす)
-            </button>
-            <button
-              type="button"
-              onClick={() => setStockMode("直接入庫")}
-              className={`py-2 rounded-lg transition-all cursor-pointer ${
-                stockMode === "直接入庫" ? "bg-white text-emerald-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              🟢 直接入庫 (増やす)
-            </button>
-          </div>
-        ) : (
-          <div className="bg-slate-100 p-1 rounded-xl text-xs font-bold">
-            <div className="py-2 rounded-lg bg-white text-red-600 shadow-xs text-center">
-              🔴 消費 (減らす)
-            </div>
-          </div>
-        )}
-
-        {/* 数量入力 */}
-        <div className="space-y-1.5 text-xs">
-          <label className="block font-bold text-slate-600">
-            {effectiveMode === "消費" ? "消費数量" : "入庫数量"} ({item.unit}) *
-          </label>
-          <input
-            type="number"
-            min={1}
-            value={quantity}
-            onChange={(e) => setQuantity(Number(e.target.value))}
-            className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:outline-hidden focus:border-brand-blue"
-          />
-        </div>
-
-        {/* アクションボタン */}
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+    <Modal
+      titleId="stock-modal-title"
+      title="出入庫の記録"
+      subtitle={
+        <>
+          対象: <span className="font-bold text-slate-700">{item.name}</span> （現在: {item.current_stock}{item.unit}）
+        </>
+      }
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
@@ -118,8 +73,52 @@ export function StockModal({
           >
             {isSaving ? "保存中..." : effectiveMode === "消費" ? "消費を確定する" : "入庫を確定する"}
           </button>
+        </>
+      }
+    >
+      {/* モード切り替え（消費のみ許可の場合はトグル自体を表示しない） */}
+      {allowStockIn ? (
+        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setStockMode("消費")}
+            className={`py-2 rounded-lg transition-all cursor-pointer ${
+              stockMode === "消費" ? "bg-white text-red-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            🔴 消費 (減らす)
+          </button>
+          <button
+            type="button"
+            onClick={() => setStockMode("直接入庫")}
+            className={`py-2 rounded-lg transition-all cursor-pointer ${
+              stockMode === "直接入庫" ? "bg-white text-emerald-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            🟢 直接入庫 (増やす)
+          </button>
         </div>
+      ) : (
+        <div className="bg-slate-100 p-1 rounded-xl text-xs font-bold">
+          <div className="py-2 rounded-lg bg-white text-red-600 shadow-xs text-center">
+            🔴 消費 (減らす)
+          </div>
+        </div>
+      )}
+
+      {/* 数量入力 */}
+      <div className="space-y-1.5 text-xs">
+        <label className="block font-bold text-slate-600">
+          {effectiveMode === "消費" ? "消費数量" : "入庫数量"} ({item.unit}) *
+        </label>
+        <input
+          type="number"
+          min={1}
+          value={quantity}
+          onChange={(e) => setQuantity(Number(e.target.value))}
+          className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:outline-hidden focus:border-brand-blue"
+        />
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -217,7 +217,7 @@ AI学習時には `WHERE log_type = '消費'` でフィルタリングを行う�
 | カラム名 (物理名) | 論理名 (日本語) | データ型 | 制約 | 説明 |
 | --- | --- | --- | --- | --- |
 | **id** | ユーザーID | uuid | PRIMARY KEY | 従業員を識別する一意のID<br>(Supabaseの `auth.users.id` と同期) |
-| **user_no** | ユーザーNo. | text | NOT NULL<br>UNIQUE | ログイン等に用いる社員番号（例：U00123） |
+| **user_no** | ユーザーNo. | text | NOT NULL<br>UNIQUE | ログイン等に用いる社員番号（例：001） |
 | **name** | 社員名 | text | NOT NULL | 例：山田 太郎 |
 | **role** | 権限 | text | NOT NULL | '現場' または '役員'。画面のアクセス制御に使用 |
 | **created_at** | 登録日時 | timestamp | DEFAULT now() | ユーザーアカウント作成日時 |
