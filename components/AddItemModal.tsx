@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createItem } from "@/services/item";
+import { Modal } from "@/components/Modal";
 
 type AddItemModalProps = {
   isOpen: boolean;
@@ -64,12 +65,30 @@ export function AddItemModal({ isOpen, onClose }: AddItemModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 relative">
-        <h3 className="text-base font-bold text-slate-800">
-          備品の新規登録
-        </h3>
+    <Modal
+      titleId="add-item-modal-title"
+      title="備品の新規登録"
+      maxWidthClassName="max-w-lg"
+      footer={
+        <>
+          <button
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-600 font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+          >
+            キャンセル
+          </button>
 
+          <button
+            onClick={handleRegister}
+            disabled={isSubmitting}
+            className="px-4 py-2 bg-brand-dark hover:bg-brand-blue text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+          >
+            {isSubmitting ? "登録中..." : "登録する"}
+          </button>
+        </>
+      }
+    >
         <div className="space-y-3 text-xs text-slate-700">
           {/* 備品名 */}
           <div>
@@ -171,25 +190,6 @@ export function AddItemModal({ isOpen, onClose }: AddItemModalProps) {
             </div>
           </div>
         </div>
-
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-          <button
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-600 font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-          >
-            キャンセル
-          </button>
-
-          <button
-            onClick={handleRegister}
-            disabled={isSubmitting}
-            className="px-4 py-2 bg-brand-dark hover:bg-brand-blue text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {isSubmitting ? "登録中..." : "登録する"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

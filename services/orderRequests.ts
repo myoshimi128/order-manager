@@ -44,7 +44,6 @@ export type OrderRequestWithItem = {
   requester?: {
     id: string;
     name: string;
-    user_no: string;
   } | null;
 };
 
@@ -184,6 +183,10 @@ export type GetOrderRequestsOptions = {
   // true の場合のみ users テーブルと結合して送信者情報(氏名・社員番号)を取得する。
   // 送信者を画面に表示しない呼び出し元にまで個人識別子を配布しないよう、既定では取得しない。
   includeRequester?: boolean;
+  // 指定した場合、その備品(item_id)のリクエストのみに絞り込む。
+  // 「リクエスト中」詳細モーダルのように特定の1備品分だけ必要な場合に、
+  // ダッシュボード全体分を毎回取得しないようにするため。
+  itemId?: string;
 };
 
 /**
@@ -192,13 +195,14 @@ export type GetOrderRequestsOptions = {
  * - statuses を渡すと該当ステータスのみに絞り込む（未指定なら全件）。
  *   一覧画面が「納品済み」等の増え続ける履歴データまで毎回取得しないようにするため。
  * - options.includeRequester が true の場合のみ送信者情報を取得する。
+ * - options.itemId を渡すとその備品のリクエストのみに絞り込む。
  */
 export async function getOrderRequests(
   statuses?: OrderRequestStatus[],
   options?: GetOrderRequestsOptions
 ) {
   try {
-    // 1) order_requests テーブルのデータを取得（statuses指定時は絞り込み）
+    // 1) order_requests テーブルのデータを取得（statuses/itemId指定時は絞り込み）
     let query = supabase
       .from("order_requests")
       .select("*")
@@ -206,6 +210,10 @@ export async function getOrderRequests(
 
     if (statuses && statuses.length > 0) {
       query = query.in("status", statuses);
+    }
+
+    if (options?.itemId) {
+      query = query.eq("item_id", options.itemId);
     }
 
     const { data: requests, error: reqError } = await query;
@@ -234,9 +242,9 @@ export async function getOrderRequests(
     }
 
     // 3) includeRequester=true のときだけ、関連する requested_by_user_id から
-    //    users テーブルを一括取得する（送信者名の表示用）。表示しない呼び出し元に
-    //    氏名・社員番号などの個人識別子を配布しないための最小取得。
-    let requestersMap = new Map<string, { id: string; name: string; user_no: string }>();
+    //    users テーブルを一括取得する（送信者名の表示用）。表示しない呼び出し元や
+    //    画面に出さない項目（社員番号など）まで配布しないよう、実際に使う列だけ取得する。
+    let requestersMap = new Map<string, { id: string; name: string }>();
 
     if (options?.includeRequester) {
       const requesterIds = Array.from(
@@ -246,7 +254,7 @@ export async function getOrderRequests(
       const { data: requesters, error: requesterError } = requesterIds.length > 0
         ? await supabase
             .from("users")
-            .select("id, name, user_no")
+            .select("id, name")
             .in("id", requesterIds)
         : { data: [], error: null };
 
