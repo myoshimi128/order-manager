@@ -42,9 +42,10 @@ export default function SupplyDashboard() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
   // 「リクエスト中」詳細モーダル用ステート（クリック時にその備品分だけ遅延取得する）
+  // requestStatusRequests が null の間はローディング中とみなす（別途ローディング用stateを持たない）
   const [requestStatusItem, setRequestStatusItem] = useState<Item | null>(null);
-  const [requestStatusRequests, setRequestStatusRequests] = useState<OrderRequestWithItem[]>([]);
-  const [isLoadingRequestStatus, setIsLoadingRequestStatus] = useState(false);
+  const [requestStatusRequests, setRequestStatusRequests] = useState<OrderRequestWithItem[] | null>(null);
+  const [requestStatusError, setRequestStatusError] = useState(false);
 
   // 出入庫モーダル用ステート
   const [stockItem, setStockItem] = useState<Item | null>(null);
@@ -300,10 +301,8 @@ export default function SupplyDashboard() {
       })
       .catch((error) => {
         console.error("リクエスト詳細の取得エラー:", error);
-        if (!ignore) setRequestStatusRequests([]);
-      })
-      .finally(() => {
-        if (!ignore) setIsLoadingRequestStatus(false);
+        // requestStatusRequests は null のままにし、取得失敗を「0件」と区別できるようにする
+        if (!ignore) setRequestStatusError(true);
       });
 
     return () => {
@@ -558,7 +557,8 @@ export default function SupplyDashboard() {
                           <button
                             type="button"
                             onClick={() => {
-                              setIsLoadingRequestStatus(true);
+                              setRequestStatusRequests(null);
+                              setRequestStatusError(false);
                               setRequestStatusItem(item);
                             }}
                             className="px-2 py-0.5 rounded-full text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100 transition-colors cursor-pointer"
@@ -651,8 +651,9 @@ export default function SupplyDashboard() {
       {requestStatusItem && (
         <RequestStatusModal
           itemName={requestStatusItem.name}
-          requests={requestStatusRequests}
-          isLoading={isLoadingRequestStatus}
+          requests={requestStatusRequests ?? []}
+          isLoading={requestStatusRequests === null && !requestStatusError}
+          isError={requestStatusError}
           onClose={closeRequestStatusModal}
         />
       )}

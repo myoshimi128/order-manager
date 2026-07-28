@@ -8,6 +8,7 @@ type RequestStatusModalProps = {
   itemName: string;
   requests: OrderRequestWithItem[];
   isLoading?: boolean;
+  isError?: boolean;
   onClose: () => void;
 };
 
@@ -15,6 +16,7 @@ export function RequestStatusModal({
   itemName,
   requests,
   isLoading = false,
+  isError = false,
   onClose,
 }: RequestStatusModalProps) {
   return (
@@ -40,6 +42,10 @@ export function RequestStatusModal({
       <div className="space-y-2 max-h-80 overflow-y-auto">
         {isLoading ? (
           <p className="text-xs text-slate-400">読み込み中...</p>
+        ) : isError ? (
+          <p className="text-xs text-red-500">
+            リクエスト情報の取得に失敗しました。時間を置いて再度お試しください。
+          </p>
         ) : requests.length === 0 ? (
           <p className="text-xs text-slate-400">リクエスト情報が見つかりませんでした。</p>
         ) : (
