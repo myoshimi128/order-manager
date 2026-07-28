@@ -44,7 +44,6 @@ export type OrderRequestWithItem = {
   requester?: {
     id: string;
     name: string;
-    user_no: string;
   } | null;
 };
 
@@ -243,9 +242,9 @@ export async function getOrderRequests(
     }
 
     // 3) includeRequester=true のときだけ、関連する requested_by_user_id から
-    //    users テーブルを一括取得する（送信者名の表示用）。表示しない呼び出し元に
-    //    氏名・社員番号などの個人識別子を配布しないための最小取得。
-    let requestersMap = new Map<string, { id: string; name: string; user_no: string }>();
+    //    users テーブルを一括取得する（送信者名の表示用）。表示しない呼び出し元や
+    //    画面に出さない項目（社員番号など）まで配布しないよう、実際に使う列だけ取得する。
+    let requestersMap = new Map<string, { id: string; name: string }>();
 
     if (options?.includeRequester) {
       const requesterIds = Array.from(
@@ -255,7 +254,7 @@ export async function getOrderRequests(
       const { data: requesters, error: requesterError } = requesterIds.length > 0
         ? await supabase
             .from("users")
-            .select("id, name, user_no")
+            .select("id, name")
             .in("id", requesterIds)
         : { data: [], error: null };
 

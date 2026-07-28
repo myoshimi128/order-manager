@@ -278,28 +278,41 @@ export default function SupplyDashboard() {
     }
   };
 
-  // --- 「リクエスト中」詳細モーダルを開く処理（その備品分だけ遅延取得する） ---
-  const handleOpenRequestStatus = async (item: Item) => {
-    setRequestStatusItem(item);
-    setIsLoadingRequestStatus(true);
+  // --- 「リクエスト中」詳細モーダルの表示対象が変わるたびに、その備品分だけ遅延取得する ---
+  // モーダルを閉じた後や別の備品を開いた後に古い取得結果が反映されないよう、
+  // cleanup で古いリクエストの結果を無視するフラグを立てる。
+  useEffect(() => {
+    const itemId = requestStatusItem?.id;
 
-    try {
-      const requests = await getOrderRequests(
-        [ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED],
-        { includeRequester: true, itemId: item.id }
-      );
-      setRequestStatusRequests(requests as OrderRequestWithItem[]);
-    } catch (error) {
-      console.error("リクエスト詳細の取得エラー:", error);
-      setRequestStatusRequests([]);
-    } finally {
-      setIsLoadingRequestStatus(false);
-    }
-  };
+    // モーダルが閉じている（表示対象がない）間は取得不要。
+    // このとき requestStatusItem && <RequestStatusModal ... /> により
+    // モーダル自体が描画されないため、直前の取得結果をここで消す必要はない。
+    if (!itemId) return;
+
+    let ignore = false;
+
+    getOrderRequests(
+      [ORDER_REQUEST_STATUS.PENDING, ORDER_REQUEST_STATUS.APPROVED],
+      { includeRequester: true, itemId }
+    )
+      .then((requests) => {
+        if (!ignore) setRequestStatusRequests(requests as OrderRequestWithItem[]);
+      })
+      .catch((error) => {
+        console.error("リクエスト詳細の取得エラー:", error);
+        if (!ignore) setRequestStatusRequests([]);
+      })
+      .finally(() => {
+        if (!ignore) setIsLoadingRequestStatus(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [requestStatusItem?.id]);
 
   const closeRequestStatusModal = () => {
     setRequestStatusItem(null);
-    setRequestStatusRequests([]);
   };
 
   // 検索・フィルター・ソートを適用する処理
@@ -544,7 +557,10 @@ export default function SupplyDashboard() {
                         {statusInfo.status === "requested" ? (
                           <button
                             type="button"
-                            onClick={() => handleOpenRequestStatus(item)}
+                            onClick={() => {
+                              setIsLoadingRequestStatus(true);
+                              setRequestStatusItem(item);
+                            }}
                             className="px-2 py-0.5 rounded-full text-xs font-bold border bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100 transition-colors cursor-pointer"
                           >
                             {statusInfo.label}
