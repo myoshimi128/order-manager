@@ -7,6 +7,7 @@ type ModalProps = {
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   maxWidthClassName?: string; // 例: "max-w-md"（既定）, "max-w-lg"
+  spacingClassName?: string; // 例: "space-y-4"（既定）, "space-y-5"
   children: React.ReactNode;
   footer: React.ReactNode;
 };
@@ -18,6 +19,7 @@ export function Modal({
   title,
   subtitle,
   maxWidthClassName = "max-w-md",
+  spacingClassName = "space-y-4",
   children,
   footer,
 }: ModalProps) {
@@ -27,7 +29,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`bg-white rounded-2xl shadow-xl border border-slate-200 ${maxWidthClassName} w-full p-6 space-y-4`}
+        className={`bg-white rounded-2xl shadow-xl border border-slate-200 ${maxWidthClassName} w-full p-6 ${spacingClassName}`}
       >
         <div>
           <h3 id={titleId} className="text-base font-bold text-slate-800">

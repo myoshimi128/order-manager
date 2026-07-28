@@ -48,6 +48,7 @@ export function StockModal({
     <Modal
       titleId="stock-modal-title"
       title="出入庫の記録"
+      spacingClassName="space-y-5"
       subtitle={
         <>
           対象: <span className="font-bold text-slate-700">{item.name}</span> （現在: {item.current_stock}{item.unit}）

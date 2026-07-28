@@ -180,7 +180,7 @@ export async function createOrderRequest({
 }
 
 export type GetOrderRequestsOptions = {
-  // true の場合のみ users テーブルと結合して送信者情報(氏名・社員番号)を取得する。
+  // true の場合のみ users テーブルと結合して送信者情報(氏名)を取得する。
   // 送信者を画面に表示しない呼び出し元にまで個人識別子を配布しないよう、既定では取得しない。
   includeRequester?: boolean;
   // 指定した場合、その備品(item_id)のリクエストのみに絞り込む。
