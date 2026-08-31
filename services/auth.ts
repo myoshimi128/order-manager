@@ -40,6 +40,7 @@ export async function login(email: string, password: string) {
 
     return {
       user,
+      session: data.session,
       redirectTo: getRedirectPath(user.role),
       error: null,
     };

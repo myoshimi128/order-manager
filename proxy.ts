@@ -1,33 +1,46 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { AUTH_COOKIE_NAME } from "@/lib/authCookie";
 
-export function proxy(request: NextRequest) {
+// 検証専用のクライアント。セッションを保持しないためリクエスト間で状態を持たない。
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { auth: { persistSession: false, autoRefreshToken: false } }
+);
+
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1. ログイン画面自体へのアクセスは絶対にそのまま通す
+  // ログイン画面自体へのアクセスはそのまま通す
   if (pathname.startsWith("/login")) {
     return NextResponse.next();
   }
 
-  // 2. 本番を想定した認証チェック（Cookieからトークンを取得）
-  // 本番ではここに 'sb-access-token' などのクッキー名が入ります
-  const token = request.cookies.get("auth-token")?.value;
-  const isLoggedIn = !!token; // トークンが存在すれば true
+  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
 
-  // 3. 未ログイン状態で保護された画面にアクセスしたらログイン画面へ
+  // Cookieの有無だけでは判定しない。
+  // 値が正当なアクセストークンかどうかを Supabase 側で検証する。
+  const isLoggedIn = token
+    ? !(await supabase.auth.getUser(token)).error
+    : false;
+
   if (!isLoggedIn) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const response = NextResponse.redirect(new URL("/login", request.url));
+    // 期限切れ・不正なトークンは残さない
+    response.cookies.delete(AUTH_COOKIE_NAME);
+    return response;
   }
 
-  // 4. ログイン済みならそのまま画面を表示
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
     /*
-     * 次のパス以外の、すべての画面遷移（/portal や /supply など今後増える画面すべて）で
-     * セキュリティチェック（プロキシ）を実行する：
+     * 次のパス以外の、すべての画面遷移（/supply など今後増える画面すべて）で
+     * 認証チェックを実行する：
      * - _next/static (Next.jsのシステムビルドファイル)
      * - _next/image (画像最適化機能)
      * - favicon.ico (ブラウザのタブに表示されるアイコン)

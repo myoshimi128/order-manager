@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 
 import Logo from '@/components/Logo';
 import { getCurrentAppUser, logout } from '@/services/auth';
+import { clearAuthCookie } from '@/lib/authCookie';
 import { type User } from '@/services/users';
 
 export default function Header() {
@@ -22,8 +23,8 @@ export default function Header() {
   }, []);
 
   async function handleLogout() {
-    // 1. クッキー (auth-token) をクリア
-    document.cookie = "auth-token=; path=/; max-age=0;";
+    // 1. 認証Cookieをクリア
+    clearAuthCookie();
 
     // 2. Supabase のセッション破棄 ＆ LocalStorage クリア
     await logout();

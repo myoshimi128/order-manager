@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { login } from "@/services/auth";
+import { setAuthCookie } from "@/lib/authCookie";
 import { PublicLayout } from '@/components/PublicLayout';
 import { Button } from '@/components/Button';
 
@@ -31,8 +32,12 @@ export default function LoginPage() {
         return;
       }
 
-      // チェック用のクッキーを発行（ミドルウェア突破用）
-      document.cookie = "auth-token=true; path=/; max-age=86400;";
+      // サーバー側（proxy.ts）で検証できるよう、アクセストークンをCookieへ複製する
+      if (!result.session) {
+        setErrorMsg('セッションの取得に失敗しました。');
+        return;
+      }
+      setAuthCookie(result.session.access_token, result.session.expires_in ?? 3600);
 
       // 状態の不整合を防ぐため、フルリロードでロール対応画面へ遷移
       window.location.href = result.redirectTo;

@@ -1,36 +1,156 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 社内備品 在庫・発注管理システム（order-manager）
 
-## Getting Started
+Excel運用に依存していた社内の備品在庫・発注業務を置き換えるために、要件定義から実装・社内提案までを一人で担当したWebアプリケーションです。
 
-First, run the development server:
+一般事務職として現場の業務課題を把握したうえで、独学で習得した TypeScript / Next.js / Supabase を用いてMVPを開発しました。
+
+**デモ:** https://（Vercelのデプロイ先URL）
+**動作確認用アカウント:**
+
+| 権限 | ユーザーNo. | パスワード |
+| --- | --- | --- |
+| 現場（一般） | 001 | （記載してください） |
+| 役職（承認者） | 900 | （記載してください） |
+
+> デモ環境のデータはすべてダミーです。自由に登録・更新をお試しいただけます。
+
+---
+
+## 開発の背景
+
+備品の在庫管理がExcelファイルの手入力で運用されており、以下の課題がありました。
+
+- 在庫数が実態と合わず、必要な備品の欠品が発生する
+- 「誰がいつ何を消費したか」の記録が残らず、補充のタイミングが担当者の勘に依存する
+- 発注の依頼・承認が口頭やメールで行われ、進捗が追えない
+
+そこで「**現場は最小操作で記録できること**」「**承認者はワンクリックで処理できること**」の2点を設計方針とし、日々の業務フローに載せられる形で在庫と発注ステータスを一元管理できるようにしました。
+
+---
+
+## 主な機能
+
+### 現場ユーザー
+
+- **在庫一覧**：現在庫数が適正基準数（閾値）を下回る備品は行を赤くハイライトし、補充が必要な備品を一目で把握できる
+- **出入庫のクイック入力**：モーダルを「消費モード・数量1」の状態で開くため、1個消費であれば開いて即確定が可能。1クリックで入庫モードに切り替えられ、モードごとにテーマ色を変えて誤入力を防止
+- **備品マスタの登録・編集**：画面遷移を挟まずモーダルで完結
+- **発注リクエスト申請**：在庫が不足した備品の補充を申請
+- **納品確認**：届いた備品を「納品しました」で確定すると、在庫数に自動加算される
+- **却下通知**：申請が却下された場合は理由とともに通知され、「確認しました」を押すと表示が消える
+
+### 役職ユーザー
+
+- **ワンクリック承認画面**：「承認待ち」「納品待ち」のみを表示するタスク消化型UI。入力フォームを排除し、処理すべきものだけが並ぶ
+- **購入先ページを直接開く**：登録された購入先URLを別タブで開き、そのまま発注作業へ移れる
+- **却下（理由入力）**：モーダルで理由を入力して差し戻し
+- **過去履歴画面**：「納品済み」「却下」を月別のアコーディオンで表示。増え続ける履歴を承認画面から分離し、日常業務の視認性を確保
+
+### 共通
+
+- Supabase Auth によるログインと、権限（現場 / 役職）に応じた画面の出し分け・リダイレクト制御
+- 出入庫の操作をすべて `stock_logs` に記録し、消費傾向を分析できるデータを蓄積
+
+---
+
+## 技術構成
+
+| 区分 | 使用技術 |
+| --- | --- |
+| 言語 | TypeScript |
+| フレームワーク | Next.js 16（App Router） / React 19 |
+| スタイリング | Tailwind CSS v4 |
+| 認証・DB | Supabase（Auth / PostgreSQL） |
+| ホスティング | Vercel |
+| その他 | ESLint |
+
+---
+
+## データベース設計
+
+4テーブル構成です。詳細な定義は [`CLAUDE.md`](./CLAUDE.md) に設計書・テーブル定義書としてまとめています。
+
+| テーブル | 役割 |
+| --- | --- |
+| `users` | 社員情報と権限（現場 / 役職）。Supabase Auth の `auth.users.id` と同期 |
+| `items` | 備品マスタ。現在庫数 `current_stock` と適正基準数 `threshold_stock` を保持 |
+| `order_requests` | 発注リクエスト。`承認待ち → 納品待ち → 納品済み` および `却下` の状態遷移を管理 |
+| `stock_logs` | 出入庫履歴。ログ種別（消費 / 直接入庫）・数量・操作者を記録 |
+
+### 設計上の判断
+
+- **在庫ステータスはDBに保持せず、都度算出する**
+  「在庫あり / 要補充 / 在庫切れ」は `current_stock` と `threshold_stock` の比較で動的に判定しています。ステータスをカラムとして持つと、在庫数の更新漏れでステータスだけが古くなる不整合が起きるためです。
+- **日時はすべてシステムが自動記録する**
+  承認・却下・納品の各日時はボタン押下時に自動で記録し、利用者に日付を入力させません。承認者の入力負荷をゼロにすることを優先しました。
+- **変動数量は常に正の整数で保存する**
+  増減の方向は `log_type`（消費 / 直接入庫）で表現しています。将来の消費傾向分析で `WHERE log_type = '消費'` により入庫ノイズを除外し、純粋な消費データだけを抽出できるようにするためです。
+
+---
+
+## ディレクトリ構成
+
+```
+app/
+├── login/page.tsx                    # ログイン
+└── supply/
+    ├── page.tsx                      # 現場ダッシュボード（在庫一覧・出入庫・却下通知）
+    ├── requests/page.tsx             # 発注リクエスト申請
+    └── admin/
+        ├── page.tsx                  # 役職用 承認・納品管理
+        └── history/page.tsx          # 過去履歴（月別）
+components/                           # 共通UI（Layout / Modal / Button など）
+services/                             # Supabase アクセス層（item / orderRequests / stockLogs / users / auth）
+lib/supabase.ts                       # Supabase クライアント
+```
+
+画面ごとのコンポーネントとデータアクセス処理を分離し、Supabase への問い合わせは `services/` に集約しています。
+
+---
+
+## ローカルでの起動方法
+
+```bash
+git clone https://github.com/myoshimi128/order-manager.git
+cd order-manager
+npm install
+```
+
+プロジェクト直下に `.env.local` を作成し、Supabase の接続情報を設定します。
+
+```
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+http://localhost:3000 を開いて動作を確認できます。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 認証・認可について
 
-## Learn More
+ログインは Supabase Auth を利用し、取得したアクセストークン（JWT）をCookieへ複製したうえで、`proxy.ts`（ミドルウェア）で Supabase に問い合わせて正当性を検証しています。Cookieの有無だけで通過できない構成です。トークンは自動更新されるため、`components/SessionSync.tsx` でセッションの更新をCookieへ同期しています。
 
-To learn more about Next.js, take a look at the following resources:
+一方で、以下はMVPの範囲外として意図的に未実装です。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Cookieをクライアント側のJavaScriptから発行しているため `httpOnly` を付与できず、XSSに対する防御としては不十分です。本番運用では `@supabase/ssr` によるサーバー側でのセッション管理へ移行する想定です。
+- 役職ユーザー専用画面（`/supply/admin`）のロール判定はクライアント側で行っています。サーバー側での強制と Supabase の RLS（行レベルセキュリティ）による保護が別途必要です。
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 今後の実装予定
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- 蓄積した `stock_logs` をもとに、備品ごとの消費周期を分析して補充時期を提案する機能
+- 発注リクエストの承認・納品時のメール通知
+- 在庫一覧の検索・保管場所によるフィルタリング
+- `@supabase/ssr` への移行と、Supabase RLS によるサーバー側でのアクセス制御
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## 開発体制
+
+個人開発（要件定義・DB設計・実装・社内提案資料の作成まで担当）
